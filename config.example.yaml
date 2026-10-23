@@ -1,0 +1,95 @@
+# Copy to config.yaml and adjust. ${VAR} / ${VAR:-default} are read from the environment.
+
+interval_minutes: 30      # how often to scrape
+jitter_minutes: 4         # random +/- so runs never happen at exact, bot-like intervals
+database: data/vinted.db
+
+client:
+  domain: www.vinted.de   # default Vinted country site (www.vinted.fr, www.vinted.nl, www.vinted.pl, ...)
+  min_delay: 2            # seconds between requests (randomised between min and max)
+  max_delay: 6
+  # Browser fingerprints to rotate through when Cloudflare pushes back.
+  impersonate: [chrome, chrome131, chrome124, edge101, safari17_0]
+  # Optional, only needed if your IP gets blocked. Residential proxies work best.
+  proxies: []
+  #  - http://user:pass@proxy-host:port
+
+notifiers:
+  - type: console
+  # - type: discord
+  #   webhook_url: ${DISCORD_WEBHOOK}
+  # - type: telegram
+  #   bot_token: ${TELEGRAM_BOT_TOKEN}
+  #   chat_id: ${TELEGRAM_CHAT_ID}
+  # - type: ntfy
+  #   topic_url: https://ntfy.sh/my-secret-vinted-topic
+  # - type: webhook
+  #   url: https://example.com/hook
+
+searches:
+  # ---------------------------------------------------------------- mini PCs
+  - name: mini-pc
+    queries:
+      - optiplex micro
+      - optiplex
+      - thinkcentre tiny
+      - thinkcentre m720q
+      - elitedesk mini
+      - prodesk mini
+      - mini pc
+      - intel nuc
+    # Instead of (or in addition to) queries you can paste a search URL from your browser,
+    # filters included:  url: "https://www.vinted.de/catalog?search_text=optiplex&price_to=150"
+    min_price: 20
+    max_price: 250
+    exclude: "\\b(monitor|bildschirm|écran|tastatur|keyboard|clavier|netzteil only|nur netzteil|vesa|halterung|stand)\\b"
+    fetch_details: 10       # fetch up to N descriptions per run when the title lacks CPU/RAM
+    notify:
+      min_value: 8          # points per 100 EUR; use `vinted-scraper top` to calibrate
+      top: 5                # max notifications per run
+      price_drop: true
+    scorer:
+      type: computer
+      min_cpu_mark: 4500    # ~ i5-6500T; raise to e.g. 8000 for 8th gen+ only
+      min_ram_gb: 4
+      assume_ram_gb: 8      # when the listing doesn't say
+      reject: [defect, lot] # also possible: barebone, no_psu
+      shipping_estimate: 6
+      kwh_price: 0.32       # electricity cost per kWh ...
+      years: 2              # ... over this many years of 24/7 use is added to the price
+      weights:
+        cpu: 1.0            # points per 1000 PassMark
+        ram: 0.4            # points per GB, up to ram_cap
+        ram_cap: 32
+        storage: 0.006      # points per GB, up to storage_cap
+        storage_cap: 1000
+        ssd_bonus: 1.0
+      form_factor:          # multipliers
+        tiny: 1.15
+        sff: 1.0
+        tower: 0.8
+        laptop: 0.9
+        unknown: 0.95
+      # cpu_overrides:      # add / correct CPUs: model: [passmark, tdp]
+      #   i5-8500t: [8700, 35]
+
+  # ------------------------------------------- any other search: rules scorer
+  # - name: lego-technic
+  #   query: lego technic
+  #   max_price: 80
+  #   notify: {min_value: 30, top: 3}
+  #   scorer:
+  #     type: rules
+  #     base: 10
+  #     shipping_estimate: 5
+  #     rules:
+  #       - {match: "\\b(neu|new|neuf|nieuw|ovp|sealed)\\b", points: 8}
+  #       - {match: "\\b(42\\d{3})\\b", points: 3}
+  #       - {match: "\\b(incomplete|unvollständig|incomplet|fehlt|missing)\\b", points: -8}
+  #       - {match: "neu mit etikett|new with tags|neuf avec étiquette", points: 5, field: condition}
+  #
+  # - name: cheapest-airpods       # no rules = simply cheapest first
+  #   query: airpods pro 2
+  #   min_price: 60
+  #   exclude: "\\b(case only|nur case|boîtier seul|left|right|links|rechts|gauche|droite)\\b"
+  #   scorer: {type: price}

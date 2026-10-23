@@ -1,0 +1,15 @@
+# One-shot unit, triggered every 30 minutes by vinted-scraper.timer.
+# Install: copy both files to /etc/systemd/system/, adjust paths/User, then
+#   systemctl daemon-reload && systemctl enable --now vinted-scraper.timer
+[Unit]
+Description=Vinted deal scraper
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=vinted
+WorkingDirectory=/opt/vinted-scraper
+EnvironmentFile=-/opt/vinted-scraper/.env
+ExecStart=/opt/vinted-scraper/.venv/bin/python -m vinted_scraper -c config.yaml once
+TimeoutStartSec=20min

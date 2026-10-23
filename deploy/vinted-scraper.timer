@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Vinted deal scraper every 30 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=30min
+RandomizedDelaySec=4min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

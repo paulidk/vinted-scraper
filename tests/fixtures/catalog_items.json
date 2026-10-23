@@ -1,0 +1,16 @@
+{
+  "items": [
+    {"id": 101, "title": "Dell OptiPlex 7060 Micro i5-8500T 16GB RAM 256GB SSD", "price": {"amount": "120.0", "currency_code": "EUR"},
+     "total_item_price": {"amount": "126.7", "currency_code": "EUR"}, "url": "https://www.vinted.de/items/101", "brand_title": "Dell",
+     "status": "Sehr gut", "photo": {"url": "https://img/101.jpg"}, "user": {"login": "seller1"}, "favourite_count": 4},
+    {"id": 102, "title": "Lenovo ThinkCentre M710q Tiny i3-7100T 4GB 128GB", "price": {"amount": "60.0", "currency_code": "EUR"},
+     "url": "https://www.vinted.de/items/102", "brand_title": "Lenovo"},
+    {"id": 103, "title": "Optiplex 3050 micro defekt", "price": {"amount": "25.0", "currency_code": "EUR"},
+     "url": "https://www.vinted.de/items/103"},
+    {"id": 104, "title": "Dell Monitor P2419H", "price": {"amount": "70.0", "currency_code": "EUR"},
+     "url": "https://www.vinted.de/items/104"},
+    {"id": 105, "title": "Mini PC sehr schnell", "price": "90.00", "currency": "EUR",
+     "url": "https://www.vinted.de/items/105"}
+  ],
+  "pagination": {"current_page": 1, "total_pages": 1}
+}

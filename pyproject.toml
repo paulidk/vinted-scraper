@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vinted-scraper"
+version = "0.1.0"
+description = "Configurable Vinted watcher that ranks listings by value for money"
+requires-python = ">=3.10"
+dependencies = ["curl_cffi>=0.7", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+vinted-scraper = "vinted_scraper.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["vinted_scraper*"]

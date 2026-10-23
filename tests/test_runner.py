@@ -1,0 +1,96 @@
+import copy
+
+from vinted_scraper.config import NotifyRules, SearchConfig, Config
+from vinted_scraper.client import ClientSettings
+from vinted_scraper.runner import Runner
+
+
+class FakeClient:
+    def __init__(self, settings, items=None, descriptions=None):
+        self.settings = settings
+        self.items = items or []
+        self.descriptions = descriptions or {}
+        self.searches = []
+        self.detail_calls = []
+
+    def search(self, params, pages=1):
+        self.searches.append(params)
+        return copy.deepcopy(self.items)
+
+    def item_description(self, item_id):
+        self.detail_calls.append(item_id)
+        return self.descriptions.get(item_id)
+
+
+def make_runner(tmp_path, items, descriptions=None, **search_kw):
+    search = SearchConfig(
+        name="pcs",
+        domain="www.vinted.de",
+        queries=[{"search_text": "optiplex"}, {"search_text": "mini pc"}],
+        exclude=__import__("re").compile("monitor", __import__("re").I),
+        scorer={"type": "computer"},
+        notify=NotifyRules(min_value=1, top=10),
+        **search_kw,
+    )
+    cfg = Config(searches=[search], client=ClientSettings(), notifiers=[], database=str(tmp_path / "db.sqlite"))
+    fake = {}
+
+    def factory(settings):
+        fake["c"] = FakeClient(settings, items, descriptions)
+        return fake["c"]
+
+    runner = Runner(cfg, client_factory=factory)
+    runner.notifiers = []
+    return runner, fake
+
+
+def test_run_ranks_filters_and_dedupes(tmp_path, catalog_items):
+    runner, fake = make_runner(tmp_path, catalog_items)
+    deals = runner.run_once()
+    ids = [d.url.rsplit("/", 1)[1] for d in deals]
+    assert len(fake["c"].searches) == 2  # both queries ran
+    assert ids[0] == "101"  # best value first
+    assert "103" not in ids  # defect rejected
+    assert "104" not in ids  # excluded by regex
+    assert len(ids) == len(set(ids))  # deduped across queries
+
+
+def test_no_repeat_notifications_but_price_drops(tmp_path, catalog_items):
+    runner, _ = make_runner(tmp_path, catalog_items)
+    assert runner.run_once()
+    assert runner.run_once() == []
+
+    cheaper = copy.deepcopy(catalog_items)
+    cheaper[0]["price"]["amount"] = "90.0"
+    cheaper[0]["total_item_price"]["amount"] = "95.0"
+    runner2, _ = make_runner(tmp_path, cheaper)
+    deals = runner2.run_once()
+    assert [d.price_drop_from for d in deals] == [120.0]
+
+
+def test_fetches_details_for_vague_listings(tmp_path, catalog_items):
+    runner, fake = make_runner(
+        tmp_path, catalog_items, descriptions={105: "Intel i7-8700T, 32GB RAM, 1TB NVMe"}, fetch_details=5
+    )
+    deals = {d.url.rsplit("/", 1)[1]: d for d in runner.run_once()}
+    assert 105 in fake["c"].detail_calls
+    assert "i7-8700t" in deals["105"].summary
+    # description is cached: no second fetch next run
+    fake["c"].detail_calls.clear()
+    runner.run_once()
+    assert 105 not in fake["c"].detail_calls
+
+
+def test_stops_querying_when_blocked(tmp_path):
+    from vinted_scraper.client import BlockedError
+
+    runner, fake = make_runner(tmp_path, [])
+    calls = []
+
+    def blocked(params, pages=1):
+        calls.append(params)
+        raise BlockedError("403")
+
+    runner.client("www.vinted.de").search = blocked
+    assert runner.run_once() == []
+    assert len(calls) == 1
