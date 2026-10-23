@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vinted Scraper Config</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%230b7d6f'/%3E%3Cpath d='M4 5h8M4 8h8M4 11h5' stroke='white' stroke-width='1.6'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #fff; --text: #1d2228; --muted: #66707b; --border: #dde1e6;
+  --accent: #0b7d6f; --accent-text: #fff; --danger: #b42318; --ok: #12784a; --input: #fff; --chip: #eef1f4;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #14171b; --panel: #1c2026; --text: #e6e9ed; --muted: #98a2ad; --border: #2e343c;
+    --accent: #2bb3a1; --accent-text: #08201c; --danger: #f97066; --ok: #47cd89; --input: #15191e; --chip: #262c34; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--border);
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 10px 16px; }
+header h1 { font-size: 16px; margin: 0; }
+header .path { color: var(--muted); font-size: 12px; font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+header .spacer { flex: 1; }
+#status { font-size: 13px; }
+#status.err { color: var(--danger); } #status.ok { color: var(--ok); }
+nav { display: flex; gap: 4px; padding: 8px 16px 0; overflow-x: auto; }
+nav button { border: 0; background: none; color: var(--muted); padding: 8px 12px; border-bottom: 2px solid transparent; cursor: pointer; font: inherit; white-space: nowrap; }
+nav button.active { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+main { max-width: 980px; margin: 0 auto; padding: 16px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+.card > summary { cursor: pointer; font-weight: 600; display: flex; gap: 10px; align-items: center; list-style: none; }
+.card > summary::-webkit-details-marker { display: none; }
+.card > summary::before { content: "▸"; color: var(--muted); }
+.card[open] > summary::before { content: "▾"; }
+.card > summary .tag { font-weight: 400; color: var(--muted); font-size: 12px; background: var(--chip); padding: 1px 8px; border-radius: 99px; }
+.card > summary .grow { flex: 1; }
+h3 { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 18px 0 8px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px 14px; }
+.grid.wide { grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+label.f { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--muted); min-width: 0; }
+label.f.full { grid-column: 1 / -1; }
+label.f .hint { font-size: 11px; }
+input, select, textarea { font: inherit; color: var(--text); background: var(--input); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; width: 100%; min-width: 0; }
+textarea { resize: vertical; font-family: ui-monospace, monospace; font-size: 13px; }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+label.check { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; margin-right: 14px; }
+label.check input { width: auto; }
+button.btn { font: inherit; border: 1px solid var(--border); background: var(--panel); color: var(--text); border-radius: 6px; padding: 6px 12px; cursor: pointer; }
+button.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); font-weight: 600; }
+button.btn.danger { color: var(--danger); }
+button.btn:disabled { opacity: .5; cursor: default; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+table { width: 100%; border-collapse: collapse; }
+td, th { text-align: left; padding: 6px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 12px; color: var(--muted); font-weight: 500; }
+.rules td input { padding: 4px 6px; }
+.result { margin-top: 10px; padding: 10px; border-radius: 6px; background: var(--chip); font-size: 13px; overflow-wrap: anywhere; }
+.result b { font-size: 18px; }
+.muted { color: var(--muted); }
+.deal img { width: 56px; height: 56px; object-fit: cover; border-radius: 6px; background: var(--chip); }
+.deal .value { font-weight: 700; font-size: 16px; }
+.deal a { color: var(--text); }
+.scroll { overflow-x: auto; }
+@media (max-width: 600px) { .hide-sm { display: none; } main { padding: 12px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Vinted scraper config</h1>
+  <span class="path" id="path"></span>
+  <span class="spacer"></span>
+  <span id="status"></span>
+  <button class="btn primary" id="save">Save</button>
+</header>
+<nav id="tabs"></nav>
+<main id="main"></main>
+
+<datalist id="domains">
+  <option>www.vinted.de</option><option>www.vinted.fr</option><option>www.vinted.nl</option><option>www.vinted.be</option>
+  <option>www.vinted.at</option><option>www.vinted.pl</option><option>www.vinted.it</option><option>www.vinted.es</option>
+  <option>www.vinted.pt</option><option>www.vinted.lt</option><option>www.vinted.cz</option><option>www.vinted.sk</option>
+  <option>www.vinted.lu</option><option>www.vinted.co.uk</option><option>www.vinted.ie</option><option>www.vinted.se</option>
+  <option>www.vinted.dk</option><option>www.vinted.fi</option><option>www.vinted.gr</option><option>www.vinted.hr</option>
+  <option>www.vinted.ro</option><option>www.vinted.hu</option><option>www.vinted.com</option>
+</datalist>
+
+<script>
+"use strict";
+let cfg = {};
+let dirty = false;
+let tab = "searches";
+const openCards = new WeakSet();  // search objects whose card is expanded
+
+// ---------------------------------------------------------------- helpers
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "class") el.className = v;
+    else if (k in el && k !== "list") el[k] = v;
+    else el.setAttribute(k, v);
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined && c !== false) el.append(c);
+  return el;
+}
+const obj = (parent, key) => (parent[key] && typeof parent[key] === "object" && !Array.isArray(parent[key])) ? parent[key] : (parent[key] = {});
+function touch() { dirty = true; setStatus("Unsaved changes", ""); }
+function setStatus(text, kind) { const s = document.getElementById("status"); s.textContent = text; s.className = kind || ""; }
+
+// A form field bound to target[key]. Empty input removes the key so the scraper's default applies.
+function field(target, key, label, opts = {}) {
+  const type = opts.type || "text";
+  const cur = target[key];
+  let input;
+  const set = (v) => { if (v === "" || v === null || v === undefined || (Array.isArray(v) && !v.length)) delete target[key]; else target[key] = v; touch(); opts.onchange && opts.onchange(); };
+  if (type === "select") {
+    input = h("select", { onchange: (e) => set(e.target.value) },
+      opts.options.map(([v, t]) => h("option", { value: v, selected: String(cur ?? opts.default ?? "") === v }, t)));
+  } else if (type === "lines") {
+    input = h("textarea", { rows: opts.rows || 4, placeholder: opts.placeholder || "", value: (cur || []).join("\n"),
+      oninput: (e) => set(e.target.value.split("\n").map((s) => s.trim()).filter(Boolean)) });
+  } else if (type === "number") {
+    input = h("input", { type: "number", step: opts.step || "any", placeholder: opts.placeholder ?? "", value: cur ?? "",
+      oninput: (e) => set(e.target.value === "" ? "" : Number(e.target.value)) });
+  } else {
+    input = h("input", { type: opts.secret ? "password" : "text", placeholder: opts.placeholder || "", value: cur ?? "", list: opts.list,
+      spellcheck: false, oninput: (e) => set(e.target.value) });
+    if (opts.secret) input.addEventListener("focus", () => (input.type = "text"));
+  }
+  return h("label", { class: "f" + (opts.full ? " full" : "") }, label, input, opts.hint ? h("span", { class: "hint" }, opts.hint) : null);
+}
+function check(target, key, label, dflt) {
+  return h("label", { class: "check" }, h("input", { type: "checkbox", checked: target[key] ?? dflt,
+    onchange: (e) => { target[key] = e.target.checked; touch(); } }), label);
+}
+
+// Remove empty strings/arrays/objects so the YAML stays minimal and defaults apply.
+function clean(v) {
+  if (Array.isArray(v)) return v.map(clean).filter((x) => x !== undefined);
+  if (v && typeof v === "object") {
+    const out = {};
+    for (const [k, x] of Object.entries(v)) {
+      const c = clean(x);
+      if (c === undefined || c === "" || (Array.isArray(c) && !c.length) || (c && typeof c === "object" && !Array.isArray(c) && !Object.keys(c).length)) continue;
+      out[k] = c;
+    }
+    return out;
+  }
+  return v;
+}
+// The scraper accepts query/url or queries/urls; the UI always edits the list form.
+function normalize(c) {
+  c.searches = c.searches || [];
+  for (const s of c.searches) {
+    if (s.query !== undefined) { s.queries = [s.query, ...(s.queries || [])]; delete s.query; }
+    if (s.url !== undefined) { s.urls = [s.url, ...(s.urls || [])]; delete s.url; }
+    s.scorer = s.scorer || { type: "rules" };
+  }
+  c.notifiers = c.notifiers || [];
+  return c;
+}
+async function api(path, body) {
+  const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }));
+  if (!res.ok && data.ok !== false) data.error = `HTTP ${res.status}`;
+  return data;
+}
+
+// --------------------------------------------------------------- scorers
+const SCORER_DEFAULTS = {
+  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
+  rules: () => ({ type: "rules", base: 10, rules: [] }),
+  price: () => ({ type: "price" }),
+};
+const TEMPLATES = {
+  "Mini PC": () => ({ name: "mini-pc", queries: ["optiplex micro", "thinkcentre tiny", "elitedesk mini", "mini pc"], min_price: 20, max_price: 250,
+    exclude: "\\b(monitor|bildschirm|écran|tastatur|keyboard|clavier|vesa|halterung)\\b", fetch_details: 10,
+    notify: { min_value: 8, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.computer() }),
+  "Any item (rules)": () => ({ name: "", queries: [], notify: { min_value: 0, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.rules() }),
+  "Cheapest first": () => ({ name: "", queries: [], notify: { top: 3, price_drop: true }, scorer: SCORER_DEFAULTS.price() }),
+};
+
+function computerScorer(sc) {
+  const w = obj(sc, "weights"), ff = obj(sc, "form_factor");
+  const reject = new Set(sc.reject ?? ["defect", "lot"]);
+  const rejectBox = (flag, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
+    onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label);
+  return [
+    h("h3", {}, "Requirements"),
+    h("div", { class: "grid" },
+      field(sc, "min_cpu_mark", "Min CPU score (PassMark)", { type: "number", placeholder: "0", hint: "i5-6500T ≈ 5000, i5-8500T ≈ 8700" }),
+      field(sc, "min_ram_gb", "Min RAM (GB)", { type: "number", placeholder: "0" }),
+      field(sc, "assume_ram_gb", "Assume RAM if not stated", { type: "number", placeholder: "8" }),
+      field(sc, "unknown_cpu_mark", "Assumed CPU score if unknown", { type: "number", placeholder: "3000" })),
+    h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
+      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
+      check(sc, "require_cpu", "missing a CPU model", false)),
+    h("h3", {}, "Running costs"),
+    h("div", { class: "grid" },
+      field(sc, "kwh_price", "Electricity per kWh", { type: "number", placeholder: "0.30" }),
+      field(sc, "years", "Years of use counted", { type: "number", placeholder: "2" }),
+      field(sc, "hours_per_day", "Hours on per day", { type: "number", placeholder: "24" }),
+      field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" }),
+      field(sc, "no_psu_penalty", "Extra cost if no PSU", { type: "number", placeholder: "15" }),
+      field(sc, "barebone_factor", "Score × if barebone", { type: "number", placeholder: "0.85" })),
+    h("h3", {}, "Weights"),
+    h("div", { class: "grid" },
+      field(w, "cpu", "Points per 1000 CPU score", { type: "number", placeholder: "1.0" }),
+      field(w, "ram", "Points per GB RAM", { type: "number", placeholder: "0.4" }),
+      field(w, "ram_cap", "RAM counted up to (GB)", { type: "number", placeholder: "32" }),
+      field(w, "storage", "Points per GB storage", { type: "number", placeholder: "0.006" }),
+      field(w, "storage_cap", "Storage counted up to (GB)", { type: "number", placeholder: "1000" }),
+      field(w, "ssd_bonus", "SSD bonus", { type: "number", placeholder: "1.0" }),
+      field(w, "wifi_bonus", "Wi-Fi bonus", { type: "number", placeholder: "0" })),
+    h("h3", {}, "Form factor multipliers"),
+    h("div", { class: "grid" },
+      field(ff, "tiny", "Micro / Tiny / Mini", { type: "number", placeholder: "1.15" }),
+      field(ff, "sff", "SFF", { type: "number", placeholder: "1.0" }),
+      field(ff, "tower", "Tower", { type: "number", placeholder: "0.8" }),
+      field(ff, "laptop", "Laptop", { type: "number", placeholder: "0.9" }),
+      field(ff, "unknown", "Unknown", { type: "number", placeholder: "0.95" })),
+  ];
+}
+
+function rulesScorer(sc) {
+  sc.rules = sc.rules || [];
+  const body = h("tbody");
+  const draw = () => {
+    body.replaceChildren(...sc.rules.map((r, i) => h("tr", {},
+      h("td", {}, h("input", { value: r.match || "", placeholder: "regex, e.g. \\b(new|neu)\\b", spellcheck: false, oninput: (e) => { r.match = e.target.value; touch(); } })),
+      ...["points", "per_unit", "max"].map((k) => h("td", {}, h("input", { type: "number", step: "any", value: r[k] ?? "",
+        oninput: (e) => { e.target.value === "" ? delete r[k] : (r[k] = Number(e.target.value)); touch(); } }))),
+      h("td", {}, h("select", { onchange: (e) => { e.target.value === "text" ? delete r.field : (r.field = e.target.value); touch(); } },
+        ["text", "title", "brand", "condition"].map((f) => h("option", { value: f, selected: (r.field || "text") === f }, f)))),
+      h("td", {}, h("button", { class: "btn danger", title: "Remove rule", onclick: () => { sc.rules.splice(i, 1); touch(); draw(); } }, "×")))));
+  };
+  draw();
+  return [
+    h("div", { class: "grid" },
+      field(sc, "base", "Base points", { type: "number", placeholder: "10" }),
+      field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
+    h("h3", {}, "Rules"),
+    h("p", { class: "muted" }, "Each matching regex adds its points (negative to penalise). \"Per unit\" multiplies the first number captured in brackets, e.g. (\\d+)\\s*gb."),
+    h("div", { class: "scroll" }, h("table", { class: "rules" },
+      h("thead", {}, h("tr", {}, h("th", {}, "Match (regex, case-insensitive)"), h("th", {}, "Points"), h("th", {}, "Per unit"), h("th", {}, "Max"), h("th", {}, "Field"), h("th"))),
+      body)),
+    h("button", { class: "btn", style: "margin-top:8px", onclick: () => { sc.rules.push({ match: "", points: 1 }); touch(); draw(); } }, "+ Add rule"),
+  ];
+}
+
+function scoreTester(s) {
+  const t = { title: "", description: "", price: "" };
+  const out = h("div");
+  const run = async () => {
+    const r = await api("/api/score", { scorer: clean(s.scorer), title: t.title, description: t.description, price: Number(t.price) || 0 });
+    out.replaceChildren(r.error ? h("div", { class: "result", style: "color:var(--danger)" }, r.error) :
+      h("div", { class: "result" }, r.reject ? h("b", { style: "color:var(--danger)" }, `Rejected: ${r.reject}`) : h("b", {}, `${r.value} points per 100`),
+        h("div", {}, `points ${r.points} · total cost ${r.cost}`), h("div", { class: "muted" }, r.summary)));
+  };
+  return [
+    h("h3", {}, "Try the scorer"),
+    h("div", { class: "grid wide" },
+      h("label", { class: "f" }, "Listing title", h("input", { placeholder: "OptiPlex 7070 Micro i5-9500T 16GB 256GB SSD", oninput: (e) => (t.title = e.target.value) })),
+      h("label", { class: "f" }, "Price", h("input", { type: "number", step: "any", placeholder: "110", oninput: (e) => (t.price = e.target.value) })),
+      h("label", { class: "f full" }, "Description (optional)", h("textarea", { rows: 2, oninput: (e) => (t.description = e.target.value) }))),
+    h("button", { class: "btn", style: "margin-top:8px", onclick: run }, "Score it"),
+    out,
+  ];
+}
+
+// ---------------------------------------------------------------- tabs
+function searchCard(s, i, open) {
+  const scorerBox = h("div");
+  const summaryName = h("span", {}, s.name || "(unnamed)");
+  const tag = h("span", { class: "tag" }, s.scorer.type || "rules");
+  const drawScorer = () => {
+    const type = s.scorer.type || "rules";
+    tag.textContent = type;
+    scorerBox.replaceChildren(...(type === "computer" ? computerScorer(s.scorer) : type === "price"
+      ? [h("div", { class: "grid" }, field(s.scorer, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
+         h("p", { class: "muted" }, "Ranks listings cheapest first.")]
+      : rulesScorer(s.scorer)), ...scoreTester(s));
+  };
+  drawScorer();
+  const notify = obj(s, "notify");
+  if (open) openCards.add(s);
+  return h("details", { class: "card", open: openCards.has(s), ontoggle: (e) => (e.target.open ? openCards.add(s) : openCards.delete(s)) },
+    h("summary", {}, summaryName, tag, h("span", { class: "grow" }),
+      h("button", { class: "btn", title: "Duplicate", onclick: (e) => { e.preventDefault(); const copy = structuredClone(s); openCards.add(copy); copy.name = (s.name || "search") + "-copy"; cfg.searches.splice(i + 1, 0, copy); touch(); render(i + 1); } }, "Duplicate"),
+      h("button", { class: "btn danger", onclick: (e) => { e.preventDefault(); if (confirm(`Delete search "${s.name}"?`)) { cfg.searches.splice(i, 1); touch(); render(); } } }, "Delete")),
+    h("h3", {}, "What to search"),
+    h("div", { class: "grid wide" },
+      field(s, "name", "Name (unique)", { placeholder: "mini-pc", onchange: () => (summaryName.textContent = s.name || "(unnamed)") }),
+      field(s, "domain", "Vinted site", { list: "domains", placeholder: cfg.client?.domain || "www.vinted.de", hint: "Leave empty to use the default from General" }),
+      field(s, "queries", "Search terms (one per line)", { type: "lines", placeholder: "optiplex micro\nthinkcentre tiny", full: true }),
+      field(s, "urls", "…or search URLs copied from your browser, filters included (one per line)", { type: "lines", rows: 2, placeholder: "https://www.vinted.de/catalog?search_text=optiplex&price_to=150", full: true })),
+    h("h3", {}, "Filters"),
+    h("div", { class: "grid" },
+      field(s, "min_price", "Min price", { type: "number" }),
+      field(s, "max_price", "Max price", { type: "number" }),
+      field(s, "pages", "Result pages per term", { type: "number", placeholder: "1", hint: "96 listings per page" }),
+      field(s, "fetch_details", "Descriptions to fetch per run", { type: "number", placeholder: "0", hint: "for listings with vague titles" }),
+      field(s, "include", "Title must match (regex)", { placeholder: "optiplex|thinkcentre" }),
+      field(s, "exclude", "Skip if matches (regex)", { placeholder: "\\b(monitor|keyboard)\\b" })),
+    h("h3", {}, "Notifications"),
+    h("div", { class: "grid" },
+      field(notify, "min_value", "Min value to notify", { type: "number", placeholder: "0", hint: "points per 100 – check the Deals tab to calibrate" }),
+      field(notify, "top", "Max alerts per run", { type: "number", placeholder: "5" }),
+      h("div", { class: "row" }, check(notify, "price_drop", "Alert again on price drop", true))),
+    h("h3", {}, "Scoring"),
+    h("div", { class: "grid" }, field(s.scorer, "type", "Scorer", { type: "select", default: "rules",
+      options: [["computer", "Computer / mini PC value"], ["rules", "Rules (any item)"], ["price", "Cheapest first"]],
+      onchange: () => { if (confirm("Reset the scorer settings for the new type?")) s.scorer = SCORER_DEFAULTS[s.scorer.type](); render(i); } })),
+    scorerBox);
+}
+
+function searchesTab() {
+  const add = h("select", { onchange: (e) => { if (!e.target.value) return; cfg.searches.push(TEMPLATES[e.target.value]()); e.target.value = ""; touch(); render(cfg.searches.length - 1); } },
+    h("option", { value: "" }, "+ Add search…"), Object.keys(TEMPLATES).map((k) => h("option", { value: k }, k)));
+  return [
+    ...cfg.searches.map((s, i) => searchCard(s, i, i === render.openIndex || cfg.searches.length === 1)),
+    cfg.searches.length ? null : h("p", { class: "muted" }, "No searches yet."),
+    h("div", { class: "row" }, h("div", { style: "max-width:240px;width:100%" }, add)),
+  ];
+}
+
+const NOTIFIER_FIELDS = {
+  console: [],
+  discord: [["webhook_url", "Webhook URL", "${DISCORD_WEBHOOK} or https://discord.com/api/webhooks/…"]],
+  telegram: [["bot_token", "Bot token", "${TELEGRAM_BOT_TOKEN}"], ["chat_id", "Chat ID", "${TELEGRAM_CHAT_ID}"]],
+  ntfy: [["topic_url", "Topic URL", "https://ntfy.sh/my-secret-topic"]],
+  webhook: [["url", "URL", "https://example.com/hook"]],
+};
+function notifiersTab() {
+  return [
+    h("p", { class: "muted" }, "Tip: write ${VARIABLE} instead of a token and put the value in a .env file or the environment, so secrets stay out of config.yaml."),
+    ...cfg.notifiers.map((n, i) => h("div", { class: "card" },
+      h("div", { class: "row" }, h("strong", { style: "flex:1" }, n.type),
+        h("button", { class: "btn danger", onclick: () => { cfg.notifiers.splice(i, 1); touch(); render(); } }, "Remove")),
+      NOTIFIER_FIELDS[n.type]?.length ? h("div", { class: "grid wide", style: "margin-top:8px" },
+        NOTIFIER_FIELDS[n.type].map(([k, label, ph]) => field(n, k, label, { placeholder: ph, secret: !String(n[k] || "").startsWith("${") && k !== "chat_id" }))) :
+        h("p", { class: "muted" }, "Prints deals in the terminal / log."))),
+    h("div", { style: "max-width:240px" }, h("select", { onchange: (e) => { if (!e.target.value) return; cfg.notifiers.push({ type: e.target.value }); touch(); render(); } },
+      h("option", { value: "" }, "+ Add notifier…"), Object.keys(NOTIFIER_FIELDS).map((k) => h("option", { value: k }, k)))),
+  ];
+}
+
+function generalTab() {
+  const client = obj(cfg, "client");
+  return [h("div", { class: "card" },
+    h("h3", { style: "margin-top:0" }, "Schedule"),
+    h("div", { class: "grid" },
+      field(cfg, "interval_minutes", "Run every (minutes)", { type: "number", placeholder: "30" }),
+      field(cfg, "jitter_minutes", "Random ± (minutes)", { type: "number", placeholder: "4" }),
+      field(cfg, "database", "Database file", { placeholder: "data/vinted.db" })),
+    h("h3", {}, "Connection"),
+    h("div", { class: "grid wide" },
+      field(client, "domain", "Default Vinted site", { list: "domains", placeholder: "www.vinted.de" }),
+      field(client, "min_delay", "Min seconds between requests", { type: "number", placeholder: "2" }),
+      field(client, "max_delay", "Max seconds between requests", { type: "number", placeholder: "6" }),
+      field(client, "max_retries", "Retries before giving up", { type: "number", placeholder: "5" }),
+      field(client, "timeout", "Request timeout (s)", { type: "number", placeholder: "30" }),
+      field(client, "impersonate", "Browser fingerprints to rotate (one per line)", { type: "lines", rows: 5, placeholder: "chrome\nchrome131\nchrome124\nedge101\nsafari17_0" }),
+      field(client, "proxies", "Proxies (one per line, optional)", { type: "lines", rows: 5, placeholder: "http://user:pass@host:port", hint: "Only needed if your IP gets blocked. Residential proxies work best." })))];
+}
+
+function yamlTab() {
+  const area = h("textarea", { rows: 28, spellcheck: false, value: "Loading…" });
+  const msg = h("div", { class: "muted", style: "margin:8px 0" });
+  api("/api/validate", { config: clean(cfg) }).then((r) => {
+    area.value = r.yaml || "";
+    msg.textContent = r.ok ? "Config is valid." : `Problem: ${r.error}`;
+    msg.style.color = r.ok ? "var(--ok)" : "var(--danger)";
+  });
+  return [h("div", { class: "card" },
+    h("p", { class: "muted", style: "margin-top:0" }, "This is the file the UI will save. You can edit it here and press Apply to load it back into the forms. Comments are not kept."),
+    msg, area,
+    h("div", { class: "row", style: "margin-top:8px" }, h("button", { class: "btn", onclick: async () => {
+      const r = await api("/api/parse-yaml", { yaml: area.value });
+      if (r.error) { msg.textContent = `YAML error: ${r.error}`; msg.style.color = "var(--danger)"; return; }
+      cfg = normalize(r.config); touch(); show("searches");
+    } }, "Apply to forms")))];
+}
+
+function dealsTab() {
+  const q = { search: "", hours: 72 };
+  const list = h("div");
+  const load = async () => {
+    list.replaceChildren(h("p", { class: "muted" }, "Loading…"));
+    const r = await api(`/api/top?n=60&hours=${encodeURIComponent(q.hours)}&search=${encodeURIComponent(q.search)}`);
+    if (!r.items?.length) { list.replaceChildren(h("p", { class: "muted" }, "Nothing yet – run the scraper (python -m vinted_scraper once) and come back.")); return; }
+    list.replaceChildren(h("div", { class: "scroll" }, h("table", {},
+      h("thead", {}, h("tr", {}, h("th", { class: "hide-sm" }), h("th", {}, "Value"), h("th", {}, "Price"), h("th", {}, "Listing"))),
+      h("tbody", {}, r.items.map((d) => h("tr", { class: "deal" },
+        h("td", { class: "hide-sm" }, d.photo ? h("img", { src: d.photo, alt: "", loading: "lazy", referrerPolicy: "no-referrer" }) : null),
+        h("td", { class: "value" }, d.value.toFixed(1)),
+        h("td", { style: "white-space:nowrap" }, `${d.price} ${d.currency}`),
+        h("td", {}, h("a", { href: d.url, target: "_blank", rel: "noopener noreferrer" }, d.title),
+          h("div", { class: "muted" }, `[${d.search}] ${d.summary}`))))))));
+  };
+  load();
+  return [h("div", { class: "card" },
+    h("div", { class: "grid" },
+      h("label", { class: "f" }, "Search", h("select", { onchange: (e) => { q.search = e.target.value; load(); } },
+        h("option", { value: "" }, "All"), cfg.searches.map((s) => h("option", { value: s.name }, s.name)))),
+      h("label", { class: "f" }, "Seen in the last (hours)", h("input", { type: "number", value: q.hours, onchange: (e) => { q.hours = e.target.value || 72; load(); } }))),
+    h("p", { class: "muted" }, "The best listings the scraper has seen, using the scores from the last run. Use it to choose a good \"Min value to notify\"."),
+    list)];
+}
+
+const TABS = { searches: ["Searches", searchesTab], notifiers: ["Notifications", notifiersTab], general: ["General", generalTab], yaml: ["YAML", yamlTab], deals: ["Deals", dealsTab] };
+function show(name) { tab = name; render(); }
+function render(openIndex) {
+  render.openIndex = openIndex;
+  document.getElementById("tabs").replaceChildren(...Object.entries(TABS).map(([k, [label]]) =>
+    h("button", { class: k === tab ? "active" : "", onclick: () => show(k) }, label)));
+  document.getElementById("main").replaceChildren(...TABS[tab][1]().filter(Boolean));
+}
+
+document.getElementById("save").addEventListener("click", async () => {
+  const btn = document.getElementById("save");
+  btn.disabled = true;
+  const r = await api("/api/config", { config: clean(cfg) });
+  btn.disabled = false;
+  if (r.ok) { dirty = false; setStatus(`Saved to ${r.path}`, "ok"); }
+  else setStatus(`Not saved: ${r.error}`, "err");
+});
+window.addEventListener("beforeunload", (e) => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
+
+(async () => {
+  const r = await api("/api/config");
+  if (r.error) { setStatus(r.error, "err"); return; }
+  cfg = normalize(r.config);
+  document.getElementById("path").textContent = r.path;
+  if (!r.exists) setStatus("No config yet – starting from the example. Save to create it.", "");
+  render();
+})();
+</script>
+</body>
+</html>

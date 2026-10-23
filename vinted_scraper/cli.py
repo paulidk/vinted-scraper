@@ -29,6 +29,9 @@ def main(argv: list[str] | None = None) -> int:
     score.add_argument("text")
     score.add_argument("--price", type=float, required=True)
     score.add_argument("--search", help="use the scorer of this configured search")
+    ui = sub.add_parser("ui", help="web page for editing the config and browsing deals")
+    ui.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 to reach it from other devices (exposes your tokens)")
+    ui.add_argument("--port", type=int, default=8765)
     probe = sub.add_parser("probe", help="fetch one search URL and print raw results (connectivity check)")
     probe.add_argument("url")
 
@@ -46,6 +49,12 @@ def main(argv: list[str] | None = None) -> int:
             listing = Listing.from_api(item)
             print(f"{listing.price:>8g} {listing.currency}  {listing.title}  {listing.url}")
         print(f"{len(items)} items", file=sys.stderr)
+        return 0
+
+    if args.command == "ui":
+        from .webui import serve
+
+        serve(args.config, args.host, args.port)
         return 0
 
     config = load_config(args.config)

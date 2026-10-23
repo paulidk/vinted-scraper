@@ -69,9 +69,29 @@ python -m vinted_scraper probe "https://www.vinted.de/catalog?search_text=optipl
 python -m vinted_scraper -c config.yaml once     # one run
 python -m vinted_scraper -c config.yaml run      # every 30 min, forever
 python -m vinted_scraper -c config.yaml top      # best items seen in the last 72h
+python -m vinted_scraper -c config.yaml ui       # web page for editing the config
 ```
 
 Secrets can be referenced as `${DISCORD_WEBHOOK}` in the config and put in a `.env` file.
+
+### Web UI for the config
+
+```bash
+python -m vinted_scraper -c config.yaml ui      # then open http://localhost:8765
+```
+
+A local page for editing `config.yaml` without touching YAML:
+
+- add, duplicate and delete searches (from Mini PC, Any item or Cheapest first templates)
+- set filters, alert rules, scorer weights and rules, and test the scorer on any title and price
+- set up notifiers (Discord, Telegram, ntfy, ...) and the scraping and proxy settings
+- view and edit the raw YAML, and browse the best deals found so far
+
+Saving checks the config first and keeps the previous version as `config.yaml.bak`. YAML
+comments are not kept. Restart the scraper after saving so it loads the new config. The UI only
+listens on localhost by default. `--host 0.0.0.0` makes it reachable from your network, which
+also shows your tokens to anyone who can reach it. With Docker, run
+`docker compose --profile ui up ui`.
 
 ### Run it permanently
 

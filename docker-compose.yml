@@ -6,3 +6,15 @@ services:
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
+
+  # Config editor: `docker compose --profile ui up ui`, then open http://localhost:8765
+  # Restart vinted-scraper after saving so it picks up the new config.
+  ui:
+    build: .
+    profiles: [ui]
+    command: ["python", "-m", "vinted_scraper", "-c", "config.yaml", "ui", "--host", "0.0.0.0"]
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - ./config.yaml:/app/config.yaml
+      - ./data:/app/data

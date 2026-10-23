@@ -17,3 +17,6 @@ vinted-scraper = "vinted_scraper.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["vinted_scraper*"]
+
+[tool.setuptools.package-data]
+vinted_scraper = ["*.html"]
