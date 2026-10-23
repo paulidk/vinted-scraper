@@ -1,7 +1,22 @@
+import json
+
 import pytest
 
 from vinted_scraper import client as client_mod
-from vinted_scraper.client import BlockedError, ClientSettings, VintedClient
+from vinted_scraper.client import (BlockedError, ClientSettings, VintedClient, parse_catalog_page,
+                                   parse_item_description, params_from_url, url_params)
+
+
+def catalog_html(items, total_pages=1):
+    """A catalog page the way Vinted renders it: items inside a Next.js RSC chunk."""
+    block = {"items": [{"id": it["id"], "productItem": it} for it in items],
+             "pagination": {"current_page": 1, "total_pages": total_pages}}
+    rsc = f'5:["$","div",null,{{"items":{json.dumps(block)}}}]\n'
+    return f"<html><body><script>self.__next_f.push([1,{json.dumps(rsc)}])</script></body></html>"
+
+
+def page(items, total_pages=1):
+    return Resp(200, headers={"content-type": "text/html"}, text=catalog_html(items, total_pages))
 
 
 class Resp:
@@ -54,15 +69,13 @@ def make_client(monkeypatch, api_responses):
 
 def test_recovers_from_cloudflare_challenge_with_new_fingerprint(monkeypatch, no_sleep):
     challenge = Resp(403, headers={"content-type": "text/html", "cf-mitigated": "challenge"}, text="Just a moment...")
-    ok = Resp(200, {"items": [{"id": 1}], "pagination": {"total_pages": 1}})
-    c, log, sessions = make_client(monkeypatch, [challenge, ok])
-    assert c.search({"search_text": "x"}) == [{"id": 1}]
+    c, log, sessions = make_client(monkeypatch, [challenge, page([{"id": 1}])])
+    assert [it["id"] for it in c.search({"search_text": "x"})] == [1]
     assert len(sessions) == 2 and sessions[0] != sessions[1]
 
 
 def test_refreshes_session_on_401(monkeypatch, no_sleep):
-    ok = Resp(200, {"items": [], "pagination": {}})
-    c, log, sessions = make_client(monkeypatch, [Resp(401), ok])
+    c, log, sessions = make_client(monkeypatch, [Resp(401), page([])])
     c.search({})
     assert len(sessions) == 2 and sessions[0] == sessions[1]  # same fingerprint, fresh cookies
 
@@ -74,9 +87,42 @@ def test_gives_up_after_max_retries(monkeypatch, no_sleep):
 
 
 def test_paginates(monkeypatch, no_sleep):
-    def page(n):
-        return Resp(200, {"items": [{"id": i} for i in range(n)], "pagination": {"total_pages": 3}})
+    def p(n):
+        return page([{"id": i} for i in range(n)], total_pages=3)
 
-    c, log, _ = make_client(monkeypatch, [page(2), page(2), page(1)])
-    assert len(c.search({}, pages=5, per_page=2)) == 5
+    c, log, _ = make_client(monkeypatch, [p(2), p(2), p(1)])
+    assert len(c.search({}, pages=5)) == 5
     assert len(log) == 3
+
+
+def test_parses_catalog_item_into_api_shape():
+    item = {
+        "id": 7, "title": "Dell OptiPlex 7060", "url": "/items/7-dell", "favouriteCount": 3,
+        "priceWithDiscount": None, "price": {"amount": "175.00", "currencyCode": "EUR"},
+        "totalItemPrice": {"amount": "184.45", "currencyCode": "EUR"},
+        "photos": [{"url": "https://img/7.webp"}], "user": {"id": 1},
+        "itemBox": {"firstLine": "DELL", "secondLine": "Sehr gut"},
+    }
+    data = parse_catalog_page(catalog_html([item], total_pages=4), "https://www.vinted.de")
+    assert data["pagination"]["total_pages"] == 4
+    assert data["items"][0] == {
+        "id": 7, "title": "Dell OptiPlex 7060", "url": "https://www.vinted.de/items/7-dell",
+        "price": {"amount": "175.00", "currency_code": "EUR"},
+        "total_item_price": {"amount": "184.45", "currency_code": "EUR"},
+        "brand_title": "DELL", "status": "Sehr gut", "photo": {"url": "https://img/7.webp"},
+        "user": {"id": 1}, "favourite_count": 3,
+    }
+
+
+def test_catalog_page_without_items_is_none():
+    assert parse_catalog_page("<html>nope</html>") is None
+
+
+def test_url_params_round_trip():
+    _, params = params_from_url("https://www.vinted.de/catalog?search_text=pc&catalog[]=1&catalog[]=2&price_to=80")
+    assert url_params(params) == [("search_text", "pc"), ("catalog[]", "1"), ("catalog[]", "2"), ("price_to", "80")]
+
+
+def test_item_description_from_json_ld():
+    html = '<script type="application/ld+json">{"@type":"Product","description":"i5-8500T, 16GB"}</script>'
+    assert parse_item_description(html) == "i5-8500T, 16GB"

@@ -1,4 +1,8 @@
-"""HTTP client for Vinted's internal JSON API.
+"""HTTP client for Vinted's web frontend.
+
+Vinted retired the public `/api/v2/catalog/items` endpoint; search results
+are now server-rendered into the catalog page as a Next.js RSC payload, which
+we fetch as HTML and parse (see `parse_catalog_page`).
 
 Vinted sits behind Cloudflare, which mostly blocks clients by TLS/HTTP2
 fingerprint and request behaviour rather than by IP. To look like a real
@@ -21,8 +25,10 @@ half hour this stays far below anything Cloudflare reacts to.
 
 from __future__ import annotations
 
+import json
 import logging
 import random
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -64,6 +70,15 @@ _URL_PARAM_MAP = {
 }
 
 
+_API_TO_URL_PARAM = {v: k for k, v in _URL_PARAM_MAP.items()}
+_API_TO_URL_PARAM["catalog_ids"] = "catalog[]"
+
+_RSC_CHUNK = re.compile(r'self\.__next_f\.push\(\[1,(".*?")\]\)</script>', re.S)
+_ITEMS_BLOCK = re.compile(r'"items":\s*(?=\{\s*"items":\s*\[)')
+_LD_JSON = re.compile(r'<script type="application/ld\+json">(.*?)</script>', re.S)
+_HTML_ACCEPT = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+
+
 class BlockedError(RuntimeError):
     """Raised when Vinted/Cloudflare keeps refusing requests."""
 
@@ -78,6 +93,82 @@ def params_from_url(url: str) -> tuple[str, dict[str, str]]:
     params.pop("search_id", None)
     params.pop("time", None)
     return parsed.netloc, params
+
+
+def url_params(params: dict[str, Any]) -> list[tuple[str, str]]:
+    """Inverse of `params_from_url`: API-style params -> catalog page query."""
+    query = []
+    for key, value in params.items():
+        if value is None:
+            continue
+        url_key = _API_TO_URL_PARAM.get(key)
+        if url_key is None and key.endswith("_ids"):
+            url_key = key + "[]"
+        if url_key:
+            query += [(url_key, v) for v in str(value).split(",") if v]
+        else:
+            query.append((key, str(value)))
+    return query
+
+
+def _rsc_payload(html: str) -> str:
+    return "".join(json.loads(chunk) for chunk in _RSC_CHUNK.findall(html))
+
+
+def _normalize_item(entry: dict, base_url: str) -> dict:
+    """Map a catalog page item onto the field names of the old JSON API."""
+    item = entry.get("productItem") or entry
+    box = item.get("itemBox") or {}
+    url = item.get("url") or ""
+    if url.startswith("/"):
+        url = base_url + url
+
+    def money(value):
+        if not isinstance(value, dict):
+            return value
+        return {"amount": value.get("amount"), "currency_code": value.get("currencyCode") or value.get("currency_code")}
+
+    photos = item.get("photos") or []
+    photo = photos[0].get("url") if photos and isinstance(photos[0], dict) else item.get("thumbnailUrl")
+    return {
+        "id": item.get("id") or entry.get("id"),
+        "title": item.get("title") or "",
+        "price": money(item.get("priceWithDiscount") or item.get("price")),
+        "total_item_price": money(item.get("totalItemPrice")),
+        "url": url,
+        "brand_title": box.get("firstLine") or "",
+        "status": box.get("secondLine") or "",
+        "photo": {"url": photo or ""},
+        "user": item.get("user") or {},
+        "favourite_count": item.get("favouriteCount") or 0,
+    }
+
+
+def parse_catalog_page(html: str, base_url: str = "") -> dict | None:
+    """Extract {"items": [...], "pagination": {...}} from a catalog page, or None if absent."""
+    payload = _rsc_payload(html)
+    match = _ITEMS_BLOCK.search(payload)
+    if match is None:
+        return None
+    try:
+        block, _ = json.JSONDecoder().raw_decode(payload, match.end())
+    except ValueError:
+        return None
+    return {
+        "items": [_normalize_item(e, base_url) for e in block.get("items") or [] if isinstance(e, dict)],
+        "pagination": block.get("pagination") or {},
+    }
+
+
+def parse_item_description(html: str) -> str | None:
+    for blob in _LD_JSON.findall(html):
+        try:
+            data = json.loads(blob)
+        except ValueError:
+            continue
+        if isinstance(data, dict) and data.get("description"):
+            return data["description"]
+    return None
 
 
 @dataclass
@@ -133,10 +224,7 @@ class VintedClient:
         )
         session.headers.update({"Accept-Language": self._accept_language()})
         self._pace()
-        resp = session.get(
-            self.base_url + "/",
-            headers={"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"},
-        )
+        resp = session.get(self.base_url + "/", headers={"Accept": _HTML_ACCEPT})
         if _is_blocked(resp):
             session.close()
             raise _Retryable(f"homepage blocked (HTTP {resp.status_code})")
@@ -149,21 +237,18 @@ class VintedClient:
             self._session.close()
             self._session = None
 
-    def get_json(self, path: str, params: dict[str, Any] | None = None, referer: str | None = None) -> dict:
+    def _get(self, path: str, params: Any, accept: str, referer: str | None, json_body: bool):
+        """GET with retries; returns the response, or None on 404."""
         last_error = ""
         for attempt in range(self.settings.max_retries):
             try:
                 if self._session is None:
                     self._session = self._new_session()
                 self._pace()
-                resp = self._session.get(
-                    self.base_url + path,
-                    params=params,
-                    headers={
-                        "Accept": "application/json, text/plain, */*",
-                        "Referer": referer or self.base_url + "/catalog",
-                    },
-                )
+                headers = {"Accept": accept}
+                if referer:
+                    headers["Referer"] = referer
+                resp = self._session.get(self.base_url + path, params=params, headers=headers)
                 if resp.status_code == 401:
                     # Session cookie expired: a fresh warm-up fixes it.
                     raise _Retryable("401 unauthorized", rotate=False, backoff=False)
@@ -172,14 +257,16 @@ class VintedClient:
                           resp.headers.get("content-type", "?"), len(resp.content))
                 if resp.status_code == 404:
                     log.warning("GET %s -> 404 not found", path)
-                    return {}
+                    return None
                 if _is_blocked(resp) or resp.status_code >= 500:
                     raise _Retryable(f"HTTP {resp.status_code}")
                 resp.raise_for_status()
-                try:
-                    return resp.json()
-                except ValueError:
-                    raise _Retryable(f"non-JSON response ({resp.headers.get('content-type', '?')})") from None
+                if json_body:
+                    try:
+                        resp.json()
+                    except ValueError:
+                        raise _Retryable(f"non-JSON response ({resp.headers.get('content-type', '?')})") from None
+                return resp
             except _Retryable as exc:
                 last_error = str(exc)
                 rotate, backoff = exc.rotate, exc.backoff
@@ -195,35 +282,44 @@ class VintedClient:
                 time.sleep(min(300, 10 * 2**attempt) + random.uniform(0, 5))
         raise BlockedError(f"giving up on {path}: {last_error}")
 
+    def get_json(self, path: str, params: dict[str, Any] | None = None, referer: str | None = None) -> dict:
+        resp = self._get(path, params, "application/json, text/plain, */*",
+                         referer or self.base_url + "/catalog", json_body=True)
+        return resp.json() if resp is not None else {}
+
+    def get_html(self, path: str, params: Any = None, referer: str | None = None) -> str:
+        resp = self._get(path, params, _HTML_ACCEPT, referer or self.base_url + "/", json_body=False)
+        return resp.text if resp is not None else ""
+
     def search(self, params: dict[str, Any], pages: int = 1, per_page: int = 96) -> list[dict]:
-        """Return raw catalog items for a search, newest first by default."""
+        """Return catalog items for a search, newest first by default.
+
+        The catalog page always renders 96 items; `per_page` only trims the result.
+        """
         items: list[dict] = []
-        query = {"order": "newest_first", **params, "per_page": per_page}
+        query = {"order": "newest_first", **params}
+        query.pop("per_page", None)
         for page in range(1, pages + 1):
-            data = self.get_json("/api/v2/catalog/items", {**query, "page": page})
-            if "items" not in data:
-                log.warning("search response has no 'items' (keys: %s); Vinted may have changed its API",
-                            sorted(data)[:10])
-            batch = data.get("items") or []
-            items.extend(batch)
-            total_pages = (data.get("pagination") or {}).get("total_pages", page)
-            if len(batch) < per_page or page >= total_pages:
+            html = self.get_html("/catalog", url_params({**query, "page": page}))
+            data = parse_catalog_page(html, self.base_url)
+            if data is None:
+                log.warning("catalog page has no item data; Vinted may have changed its site")
                 break
-        return items
+            batch = data["items"]
+            items.extend(batch)
+            total_pages = data["pagination"].get("total_pages") or page
+            if not batch or page >= total_pages:
+                break
+        return items[: per_page * pages]
 
     def item_description(self, item_id: int | str) -> str | None:
         """Best-effort fetch of a listing's description (not included in search results)."""
-        referer = f"{self.base_url}/items/{item_id}"
-        for path in (f"/api/v2/items/{item_id}/details", f"/api/v2/items/{item_id}"):
-            try:
-                data = self.get_json(path, referer=referer)
-            except BlockedError as exc:
-                log.info("could not fetch details for %s: %s", item_id, exc)
-                return None
-            item = data.get("item") or data
-            if isinstance(item, dict) and item.get("description"):
-                return item["description"]
-        return None
+        try:
+            html = self.get_html(f"/items/{item_id}", referer=self.base_url + "/catalog")
+        except BlockedError as exc:
+            log.info("could not fetch details for %s: %s", item_id, exc)
+            return None
+        return parse_item_description(html)
 
 
 class _Retryable(Exception):
