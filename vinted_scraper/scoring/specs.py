@@ -10,18 +10,30 @@ from .cpu_db import CpuInfo, lookup
 # "to" is French for TB, but "8 to 16GB" is English: never treat it as a unit before a number.
 _SIZE = r"(\d{1,4}(?:[.,]\d)?)\s*(tb|to(?!\s*\d)|gb|go|g)\b"
 _RAM_WORDS = r"(ram|ddr\d?l?|memory|mémoire|memoire|arbeitsspeicher|speicher\s*ram|pamięć|pamiec|operační|geheugen|memoria|so-?dimm)"
-_DISK_WORDS = r"(ssd|hdd|nvme|m\.?2|emmc|disk|disque|festplatte|stockage|dysk|schijf|disco|storage|sata|speicher)"
+_DISK_WORDS = r"(ssd|hdd|nvme|m\.?2|emmc|disk|disque|festplatte|stockage|dysk|schijf|disco|storage|sata|(?<!arbeits)speicher)"
+
+
+
+def _gap(blocked_words: str) -> str:
+    """Up to 12 non-digit chars that never run across one of `blocked_words`.
+
+    Stops "4 Go RAM / SSD 128 Go" from pairing RAM with 128.
+    """
+    return rf"(?:(?!{blocked_words.replace('(', '(?:', 1)})[^\d\n]){{0,12}}?"
+
 
 _RAM_NEAR = [
-    re.compile(_SIZE + r"[^\d\n]{0,12}?" + _RAM_WORDS),
-    re.compile(_RAM_WORDS + r"[^\d\n]{0,12}?" + _SIZE),
+    re.compile(_SIZE + _gap(_DISK_WORDS) + _RAM_WORDS),
+    re.compile(_RAM_WORDS + _gap(_DISK_WORDS) + _SIZE),
 ]
 _DISK_NEAR = [
-    re.compile(_SIZE + r"[^\d\n]{0,12}?" + _DISK_WORDS),
-    re.compile(_DISK_WORDS + r"[^\d\n]{0,12}?" + _SIZE),
+    re.compile(_SIZE + _gap(_RAM_WORDS) + _DISK_WORDS),
+    re.compile(_DISK_WORDS + _gap(_RAM_WORDS) + _SIZE),
 ]
 # "8/256", "16GB/512GB", "8 + 256"
 _PAIR = re.compile(r"\b(\d{1,2})\s*(?:gb|go)?\s*[/+|]\s*(\d{3,4}|[12])\s*(gb|go|tb|to)?\b")
+# "64GB/6GB", "512 Go + 8 Go": both units given, either order; the smaller one is RAM
+_UNIT_PAIR = re.compile(_SIZE + r"\s*[/+|]\s*" + _SIZE)
 
 _RAM_SIZES = {2, 4, 6, 8, 12, 16, 20, 24, 32, 40, 48, 64, 96, 128}
 _DISK_SIZES = {1, 2, 4, 32, 64, 120, 128, 240, 250, 256, 320, 480, 500, 512, 960, 1000, 1024, 2000, 2048}
@@ -104,15 +116,26 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -
         for m in rx.finditer(t):
             size, unit = (m.group(1), m.group(2)) if m.group(1)[0].isdigit() else (m.group(2), m.group(3))
             gb = _gb(size, unit)
-            if gb >= 16 and gb not in ram_candidates:
+            if gb >= 16:
                 disk_candidates.append(gb)
+    # A size next to both kinds of keyword ("8go de RAM - 128go de SSD", "SSD 128GB DDR3 16GB")
+    # is storage if another size already explains the RAM; otherwise it stays RAM.
+    if any(v not in disk_candidates for v in ram_candidates):
+        ram_candidates = [v for v in ram_candidates if v not in disk_candidates]
+    else:
+        disk_candidates = [v for v in disk_candidates if v not in ram_candidates]
     for m in _PAIR.finditer(t):
         ram, disk, unit = int(m.group(1)), m.group(2), m.group(3)
         if ram in _RAM_SIZES and int(disk) in _DISK_SIZES:
             ram_candidates.append(float(ram))
             disk_candidates.append(_gb(disk, unit or ""))
+    for m in _UNIT_PAIR.finditer(t):
+        small, big = sorted((_gb(m.group(1), m.group(2)), _gb(m.group(3), m.group(4))))
+        if small in _RAM_SIZES and big >= 32 and big > small:
+            ram_candidates.append(small)
+            disk_candidates.append(big)
     if not ram_candidates:
-        loose = [float(m.group(1)) for m in re.finditer(_SIZE, t) if m.group(2) in ("gb", "go")]
+        loose = [float(m.group(1).replace(",", ".")) for m in re.finditer(_SIZE, t) if m.group(2) in ("gb", "go")]
         # Without a RAM keyword, the first plausible size is usually the installed amount
         # ("8GB, upgradable to 32GB").
         ram_candidates = [v for v in loose if v in _RAM_SIZES and v <= 64][:1]

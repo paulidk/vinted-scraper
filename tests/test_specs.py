@@ -49,6 +49,11 @@ def test_cpu_overrides():
         ("Optiplex 8GB, upgradable 8 to 16GB", 8, None),
         ("i5 sold 12/2023 receipt", None, None),
         ("komputer 16 GB pamięć 1 TB dysk", 16, 1000),
+        ("Asus CN62 Intel celeron 64Gb/6Gb", 6, 64),
+        ("OptiPlex 3046 Micro – Intel i3 / 4 Go RAM / SSD 128 Go / Wi-Fi", 4, 128),
+        ("M720q 512 Go SSD + 8 Go", 8, 512),
+        ("Tour PC HP - 8go de RAM - 128go de SSD - 500go de HDD", 8, 500),
+        ("Dell OptiPlex SFF i3 4th ssd 128Gb ddr3 16Go Win 11 pro", 16, 128),
     ],
 )
 def test_ram_and_storage(text, ram, storage):
@@ -78,3 +83,7 @@ def test_flags():
     assert parse_specs("Mini PC sans alimentation").no_psu
     assert parse_specs("Lot de 3 Optiplex").lot
     assert not parse_specs("Optiplex 2x 8GB RAM").lot
+
+
+def test_comma_decimal_size_does_not_crash():
+    parse_specs("Mini PC i5-8500T 8500,8 GB")  # used to raise ValueError

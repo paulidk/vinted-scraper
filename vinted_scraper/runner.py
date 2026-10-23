@@ -41,6 +41,7 @@ class Runner:
                 log.error("[%s] blocked on %s, skipping the rest of this run: %s",
                           search.name, params.get("search_text", params), exc)
                 break
+            log.info("[%s] %s: %d items", search.name, params.get("search_text", "(no text)"), len(raw_items))
             for raw in raw_items:
                 try:
                     listing = Listing.from_api(raw)
@@ -65,19 +66,25 @@ class Runner:
         listings = [item for item in self.fetch(search) if self._keep(search, item)]
         scored: list[tuple[Listing, Score]] = []
         detail_budget = search.fetch_details
+        log.info("[%s] scoring %d listings (fetching up to %d descriptions)", search.name, len(listings), detail_budget)
         for listing in listings:
             prev = self.store.previous(search.name, listing.id)
             if prev and prev.description and not listing.description:
                 listing.description = prev.description
-            score = scorer.score(listing)
-            if score.needs_details and detail_budget > 0 and not listing.description and score.reject in (None, "cpu unknown"):
-                detail_budget -= 1
-                desc = self.client(search.domain).item_description(listing.id)
-                if desc:
-                    listing.description = desc
-                    if search.exclude and search.exclude.search(desc):
-                        continue
-                    score = scorer.score(listing)
+            try:
+                score = scorer.score(listing)
+                if score.needs_details and detail_budget > 0 and not listing.description and score.reject in (None, "cpu unknown"):
+                    detail_budget -= 1
+                    desc = self.client(search.domain).item_description(listing.id)
+                    if desc:
+                        listing.description = desc
+                        if search.exclude and search.exclude.search(desc):
+                            continue
+                        score = scorer.score(listing)
+            except Exception:
+                # One odd listing must not take down the whole search.
+                log.exception("[%s] could not score %s (%s)", search.name, listing.id, listing.title)
+                continue
             self.store.upsert(search.name, listing, score)
             scored.append((listing, score))
 
