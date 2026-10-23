@@ -10,6 +10,7 @@ class Resp:
         self._json = json_data or {}
         self.headers = headers or {"content-type": "application/json"}
         self.text = text
+        self.content = text.encode()
 
     def json(self):
         return self._json

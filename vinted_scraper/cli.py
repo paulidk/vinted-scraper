@@ -49,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
             listing = Listing.from_api(item)
             print(f"{listing.price:>8g} {listing.currency}  {listing.title}  {listing.url}")
         print(f"{len(items)} items", file=sys.stderr)
+        if not items:
+            _diagnose(client)
         return 0
 
     if args.command == "ui":
@@ -76,6 +78,22 @@ def main(argv: list[str] | None = None) -> int:
     else:
         runner.run_forever()
     return 0
+
+
+def _diagnose(client: VintedClient) -> None:
+    """Print what Vinted actually answered, to debug empty results."""
+    resp = client.last_response
+    session = client._session
+    print("\n--- diagnostics (paste this when reporting a problem) ---", file=sys.stderr)
+    print(f"curl_cffi impersonating: {client.settings.impersonate[client._fingerprint_idx]}", file=sys.stderr)
+    if session is not None:
+        print(f"cookies: {sorted(session.cookies.keys())}", file=sys.stderr)
+    if resp is None:
+        print("no API response recorded", file=sys.stderr)
+        return
+    print(f"last request: {resp.url}", file=sys.stderr)
+    print(f"status: {resp.status_code}  content-type: {resp.headers.get('content-type')}", file=sys.stderr)
+    print(f"body: {resp.text[:800]}", file=sys.stderr)
 
 
 if __name__ == "__main__":

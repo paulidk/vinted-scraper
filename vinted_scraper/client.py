@@ -98,6 +98,7 @@ class VintedClient:
         self._fingerprint_idx = random.randrange(len(self.settings.impersonate))
         self._proxy_idx = random.randrange(len(self.settings.proxies)) if self.settings.proxies else 0
         self._last_request = 0.0
+        self.last_response = None  # kept for diagnostics (`probe`)
 
     @property
     def base_url(self) -> str:
@@ -166,12 +167,19 @@ class VintedClient:
                 if resp.status_code == 401:
                     # Session cookie expired: a fresh warm-up fixes it.
                     raise _Retryable("401 unauthorized", rotate=False, backoff=False)
+                self.last_response = resp
+                log.debug("GET %s -> HTTP %s (%s, %d bytes)", path, resp.status_code,
+                          resp.headers.get("content-type", "?"), len(resp.content))
                 if resp.status_code == 404:
+                    log.warning("GET %s -> 404 not found", path)
                     return {}
                 if _is_blocked(resp) or resp.status_code >= 500:
                     raise _Retryable(f"HTTP {resp.status_code}")
                 resp.raise_for_status()
-                return resp.json()
+                try:
+                    return resp.json()
+                except ValueError:
+                    raise _Retryable(f"non-JSON response ({resp.headers.get('content-type', '?')})") from None
             except _Retryable as exc:
                 last_error = str(exc)
                 rotate, backoff = exc.rotate, exc.backoff
@@ -193,6 +201,9 @@ class VintedClient:
         query = {"order": "newest_first", **params, "per_page": per_page}
         for page in range(1, pages + 1):
             data = self.get_json("/api/v2/catalog/items", {**query, "page": page})
+            if "items" not in data:
+                log.warning("search response has no 'items' (keys: %s); Vinted may have changed its API",
+                            sorted(data)[:10])
             batch = data.get("items") or []
             items.extend(batch)
             total_pages = (data.get("pagination") or {}).get("total_pages", page)
