@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 
 from .cpu_db import CpuInfo, cpu_count, lookup
+from .gpu_db import GpuInfo, find_gpus
 
 # "to" is French for TB, but "8 to 16GB" is English: never treat it as a unit before a number.
 # "2x8GB" is one 16GB size.
@@ -56,6 +57,13 @@ CPU_PART = re.compile(
     r"\b(fc)?lga\s*-?\d{3,4}\b|\b(am[345]|sp[35]|s?tr[45])\b|\b(sockel|socket|tray|boxed)\b|\bsr[0-9a-z]{3}\b|"
     r"\b\d+c\s*/\s*\d+t\b"
 )
+# A graphics card on its own: "Grafikkarte MSI GTX 1060", or a card named without any CPU or machine.
+GPU_FIRST = re.compile(
+    r"^\W*(grafikkarte|carte\s*graphique|scheda\s*(?:video|grafica)|graphics\s*card|video\s*card|gpu|"
+    r"tarjeta\s*gr[aá]fica|videokaart|karta\s*graficzna)\b"
+)
+_VRAM_AFTER = re.compile(r"\s*-?\s*(\d{1,2})\s*(?:gb|go|g)\b")
+_VRAM = re.compile(r"\s*(?:de\s*)?(?:vram|gddr\d\w*|video)\b")
 # Starting with the word is a strong sign, even with a maker in the title ("CPU Dell AMD Epyc 7402").
 CPU_FIRST = re.compile(r"^\W*(cpu|processor|prozessor|processeur|processore|procesor|procesador|processador)\b")
 # ...unless the title also names a whole machine: what it is, its model line, a maker or a RAM/storage size.
@@ -83,6 +91,13 @@ KIT_PARTS = re.compile(r"\b(kit|bundle)\b.*\b(cpu|processeur|prozessor|processor
 DISK = re.compile(r"\b(ssd|hdd|nvme|m\.?2|disk|disque|festplatte|\d+\s*(?:tb|to))\b")
 BUNDLED = re.compile(r"\+|&|\b(mit|with|avec|con|und|et|inkl\w*|incl\w*)\b")
 RAM = re.compile(r"\b(ram|ddr\d|\d+\s*(?:gb|go)\b)")
+# Asking to pay outside Vinted (no buyer protection): the usual bait behind a too-good price.
+OFFSITE = re.compile(
+    r"(?:no|not|kein\w*|nicht|pas\s*de|niente|sin)\s*(?:payment|paiement|zahlung|bezahlung|pagamento|pago)?\s*"
+    r"(?:by|via|über|ueber|par|sur|tramite|con|per)?\s*vinted"
+    r"|\b(paypal|pay\s*pal|whats\s*app|telegram|western\s*union|überweisung|virement|bonifico|bank\s*transfer|"
+    r"f&f|friends\s*(?:and|&)\s*family)\b"
+)
 WIFI = re.compile(r"\b(wi-?fi|wlan|802\.11)\b")
 
 
@@ -98,7 +113,9 @@ class Specs:
     no_psu: bool = False
     lot: bool = False
     cpu_only: bool = False
+    offsite: bool = False
     cpus: int = 1  # sockets: 2 for "2x Xeon ..."
+    gpu: GpuInfo | None = None  # dedicated graphics card
     wifi: bool = False
 
     def summary(self) -> str:
@@ -111,9 +128,11 @@ class Specs:
         if self.storage_gb:
             size = f"{self.storage_gb / 1000:g}TB" if self.storage_gb >= 1000 else f"{self.storage_gb:g}GB"
             parts.append(f"{size} {'SSD' if self.ssd else 'disk'}")
+        if self.gpu:
+            parts.append(f"{self.gpu.model} ({self.gpu.mark} G3D)")
         if self.form_factor:
             parts.append(self.form_factor)
-        parts += [flag for flag in ("defect", "barebone", "no_psu", "lot", "cpu_only") if getattr(self, flag)]
+        parts += [flag for flag in ("defect", "barebone", "no_psu", "lot", "cpu_only", "offsite") if getattr(self, flag)]
         return ", ".join(parts) or "no specs found"
 
 
@@ -188,9 +207,17 @@ def _pairs(text: str):
             yield small, big
 
 
-def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -> Specs:
+def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "", gpu_overrides: dict | None = None) -> Specs:
     t = text.lower()
     specs = Specs(cpu=lookup(t, cpu_overrides))
+    gpus = find_gpus(t, gpu_overrides)
+    # The card in the title is the one fitted; a description may also name older or "compatible" ones.
+    in_title = find_gpus(title, gpu_overrides) if title else []
+    if in_title or gpus:
+        specs.gpu = max((g for g, _, _ in in_title or gpus), key=lambda g: g.mark)
+    # "GTX 1060 6GB", "RX 580 8 Go", "8GB GDDR6": video memory, neither RAM nor storage. Right after the
+    # card only up to 12 GB counts: "RTX 3060 Ti 16GB 1TB" more likely lists the RAM next.
+    vram_at = {m.start(1) for _, _, end in gpus if (m := _VRAM_AFTER.match(t, end)) and int(m.group(1)) <= 12}
 
     sizes = [
         _Size(m.start(), m.end(), _gb(number, unit) * int(count or 1), unit)
@@ -198,6 +225,7 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -
         for count, number, unit in [m.groups()]
         # A bare "g" is also a model suffix: "Ryzen 5 5600G", "Xeon E-2176G" are not sizes.
         if unit != "g" or (_gb(number, unit) in _RAM_SIZES | _DISK_SIZES and not re.search(r"[a-z]-\s*$", t[: m.start(2)]))
+        if m.start(2) not in vram_at and not _VRAM.match(t, m.end())
     ]
     assigned = _assign(t, sizes)
     ram_candidates = [sizes[i].gb for i, kind in assigned.items() if kind == "ram"]
@@ -234,15 +262,19 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -
     specs.barebone = bool(BAREBONE.search(t))
     specs.no_psu = bool(NO_PSU.search(t))
     specs.lot = bool(LOT.search(t))
+    specs.offsite = bool(OFFSITE.search(t))
     specs.cpus = cpu_count(t) if specs.cpu else 1
     head = (title or text.split("\n", 1)[0]).lower()
     noun, server, line, maker = (rx.search(head) for rx in (MACHINE_NOUN, SERVER_WORD, MODEL_LINE, MAKER))
     cpu = lookup(head, cpu_overrides)
+    head_gpu = find_gpus(head, gpu_overrides)
     specs.cpu_only = bool(
         # "Carte mère serveur Supermicro" is a board, "19\" Server mit Gigabyte Mainboard" a server
         ((part := PART.search(head)) and not (noun or line) and not (server and server.start() < part.start()))
         or (KIT.search(head) and not line)  # "Kit Serveur/Workstation X99 Xeon + 64Go RAM"
         or (KIT_PARTS.search(head) and not (noun or server or line))
+        or (GPU_FIRST.search(head) and not line)
+        or (head_gpu and not (cpu or noun or server or line))
         # "Processeur serveur Xeon E5-2673 v4 LGA2011" is still a processor
         or (CPU_FIRST.search(head) and not (noun or line))
         or (CPU_PART.search(head) and not (noun or line or maker))

@@ -1,3 +1,5 @@
+import pytest
+
 from vinted_scraper.models import Listing
 from vinted_scraper.scoring import build_scorer
 
@@ -78,3 +80,19 @@ def test_dual_cpu_server_costs_more_to_run():
     assert dual.points > single.points and dual.cost > single.cost
     assert single.cost > tower.cost  # server: 35 W extra idle draw
     assert "2x e5-2650 v2" in dual.summary
+
+
+def test_graphics_card_points_and_power():
+    from vinted_scraper.models import Listing
+    from vinted_scraper.scoring import build_scorer
+
+    def score(scorer, title):
+        return scorer.score(Listing(id=1, title=title, price=300, currency="EUR", url=""))
+
+    ignore, count = build_scorer({"type": "computer"}), build_scorer({"type": "computer", "weights": {"gpu": 0.5}})
+    plain, with_card = "Gaming PC i5-8400 16GB 512GB SSD", "Gaming PC i5-8400 16GB 512GB SSD RTX 3060"
+    assert score(ignore, with_card).points == score(ignore, plain).points  # weight 0: no points ...
+    assert score(ignore, with_card).cost > score(ignore, plain).cost  # ... but the card still idles
+    assert score(count, with_card).points == pytest.approx(score(count, plain).points + 17000 / 1000 * 0.5 * 0.95, abs=0.02)
+    assert "rtx 3060 (17000 G3D)" in score(count, with_card).summary
+    assert score(count, "No payment by vinted! Gaming PC RTX 4080 Ryzen 7").reject == "offsite"

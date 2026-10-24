@@ -47,7 +47,16 @@ value  = 100 × points / cost          → "points per 100 €", what everything
   tower servers get 35 W extra idle draw (`extra_watts`). At 24/7 that running cost is what
   makes most servers poor value; lower `hours_per_day` if yours won't run all day.
 
-Loose CPUs, mainboards and RAID controllers are skipped (`reject: cpu_only`).
+**Graphics cards** (GeForce GT/GTX/RTX, Quadro, RTX A-series, Radeon RX/R9, Arc; ~120 cards with
+an approximate G3D Mark) are recognised in every search. A card always adds its idle draw (6–20 W)
+to the running cost; it only earns points where you set `weights.gpu`, e.g. `0.5` per 1000 G3D in
+the desktops search (a GTX 1070 is then worth about as much as an i5-8500). Video memory such as
+"GTX 1060 6GB" or "8GB GDDR6" is never counted as RAM.
+
+Loose CPUs, mainboards, RAID controllers and graphics cards on their own are skipped
+(`reject: cpu_only`), and so are listings that ask you to pay outside Vinted (`reject: offsite`:
+"no payment by Vinted", PayPal, WhatsApp, bank transfer). Those come with no buyer protection and
+are the usual bait behind a too-good price like an RTX 4080 PC for 400 €.
 
 ## Top-3 alerts
 

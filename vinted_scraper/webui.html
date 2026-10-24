@@ -176,7 +176,7 @@ async function api(path, body) {
 
 // --------------------------------------------------------------- scorers
 const SCORER_DEFAULTS = {
-  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
+  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only", "offsite"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
   rules: () => ({ type: "rules", base: 10, rules: [] }),
   price: () => ({ type: "price" }),
 };
@@ -186,7 +186,7 @@ const TEMPLATES = {
     notify: { min_value: 8, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.computer() }),
   "Desktop PCs (whole category)": () => ({ name: "desktops", urls: ["https://www.vinted.de/catalog?catalog[]=3581"], min_price: 30, max_price: 500,
     fetch_details: 10, notify: { min_value: 5, podium: 3, price_drop: true },
-    scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 12,
+    scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 12, weights: { gpu: 0.5 },
       form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1 } } }),
   "Servers": () => ({ name: "servers", queries: ["poweredge", "proliant", "supermicro", "xeon", "primergy", "thinksystem", "rack server", "epyc"],
     params: { order: "relevance" }, include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|celsius|thinkstation)\\b", pages: 2, min_price: 30, max_price: 800, fetch_details: 10, notify: { min_value: 3, podium: 3, price_drop: true },
@@ -198,7 +198,7 @@ const TEMPLATES = {
 
 function computerScorer(sc) {
   const w = obj(sc, "weights"), ff = obj(sc, "form_factor"), xw = obj(sc, "extra_watts");
-  const reject = new Set(sc.reject ?? ["defect", "lot", "cpu_only"]);
+  const reject = new Set(sc.reject ?? ["defect", "lot", "cpu_only", "offsite"]);
   const rejectBox = (flag, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
     onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label);
   return [
@@ -209,7 +209,7 @@ function computerScorer(sc) {
       field(sc, "assume_ram_gb", "Assume RAM if not stated", { type: "number", placeholder: "8" }),
       field(sc, "unknown_cpu_mark", "Assumed CPU score if unknown", { type: "number", placeholder: "3000" })),
     h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
-      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("cpu_only", "just a CPU or board"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
+      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("cpu_only", "just a CPU, board or graphics card"), rejectBox("offsite", "asking to pay outside Vinted"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
       check(sc, "require_cpu", "missing a CPU model", false)),
     h("h3", {}, "Running costs"),
     h("div", { class: "grid" },
@@ -229,7 +229,8 @@ function computerScorer(sc) {
       field(w, "storage", "Points per GB storage", { type: "number", placeholder: "0.006" }),
       field(w, "storage_cap", "Storage counted up to (GB)", { type: "number", placeholder: "1000" }),
       field(w, "ssd_bonus", "SSD bonus", { type: "number", placeholder: "1.0" }),
-      field(w, "wifi_bonus", "Wi-Fi bonus", { type: "number", placeholder: "0" })),
+      field(w, "wifi_bonus", "Wi-Fi bonus", { type: "number", placeholder: "0" }),
+      field(w, "gpu", "Points per 1000 GPU score (G3D)", { type: "number", placeholder: "0", hint: "GTX 1070 ≈ 13500, RTX 3060 ≈ 17000; 0 ignores the card" })),
     h("h3", {}, "Form factor multipliers"),
     h("div", { class: "grid" },
       field(ff, "tiny", "Micro / Tiny / Mini", { type: "number", placeholder: "1.15" }),

@@ -46,7 +46,8 @@ nothing. Start there when scraping breaks.
 | `vinted_scraper/client.py` | curl_cffi HTTP client, Cloudflare handling, catalog-page and item-page parsing |
 | `vinted_scraper/models.py` | `Listing` built from a normalized item dict |
 | `vinted_scraper/scoring/cpu_db.py` | ~380 CPUs (mini PC, desktop, Xeon, EPYC) → approx. PassMark + TDP, estimation for unknown models |
-| `vinted_scraper/scoring/specs.py` | free-text → CPU, RAM, storage, form factor, defect/lot/barebone flags |
+| `vinted_scraper/scoring/gpu_db.py` | ~120 graphics cards → approx. G3D Mark, idle watts |
+| `vinted_scraper/scoring/specs.py` | free-text → CPU, GPU, RAM, storage, form factor, defect/lot/barebone/part/offsite flags |
 | `vinted_scraper/scoring/computer.py` | mini PC value scorer: points vs. price + fees + shipping + electricity |
 | `vinted_scraper/scoring/rules.py` | generic regex-points scorer; `type: price` = no rules = cheapest first |
 | `vinted_scraper/runner.py` | fetch → filter → score (+ optional description fetch) → store → notify |
@@ -108,6 +109,13 @@ E-2xxx, W-2xxx, Scalable metal names, D, X56xx, EPYC; bare "Xeon 10 Core" is est
 `cpu_count` → `Specs.cpus` = 2 for "2x Xeon"/"Dual CPU" (not "2x8GB"). Form factor `server`
 (rack, 1U/2U, PowerEdge, ProLiant, Primergy, Supermicro, ...) is checked first and adds
 `extra_watts` idle draw. Plain "server" doesn't count: "Mini PC Server" is a home server.
+
+GPUs: `gpu_db.find_gpus` only returns cards in its table (so "Primergy RX 100" and "Vega 11"
+iGPUs don't count). The title's card wins over ones in the description. A size right after a card
+(≤12 GB, "GTX 1060 6GB") or followed by VRAM/GDDR is dropped before RAM/storage parsing. Points
+come from `weights.gpu` (default 0); the card's idle watts are always added to the energy cost.
+A card alone ("Grafikkarte ...", or a card with no CPU or machine word) is `cpu_only`.
+`offsite` flags requests to pay outside Vinted; it is in the default reject list.
 
 Vinted's text search is fuzzy and ignores the text almost completely with a category filter, so
 the user's `desktops` search is the whole category 3581 (newest first) and `servers` uses

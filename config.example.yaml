@@ -60,7 +60,8 @@ searches:
       min_cpu_mark: 4500    # ~ i5-6500T; raise to e.g. 8000 for 8th gen+ only
       min_ram_gb: 4
       assume_ram_gb: 8      # when the listing doesn't say
-      reject: [defect, lot, cpu_only]  # cpu_only = a loose processor/board; also possible: barebone, no_psu
+      reject: [defect, lot, cpu_only, offsite]  # cpu_only = a loose CPU/board/graphics card,
+                                                # offsite = asks to pay outside Vinted; also: barebone, no_psu
       shipping_estimate: 6
       kwh_price: 0.32       # electricity cost per kWh ...
       years: 2              # ... over this many years of 24/7 use is added to the price
@@ -94,9 +95,10 @@ searches:
   #     min_cpu_mark: 6000
   #     require_cpu: true
   #     min_ram_gb: 8
-  #     reject: [defect, lot, cpu_only]
+  #     reject: [defect, lot, cpu_only, offsite]
   #     shipping_estimate: 12
-  #     weights: {ram: 0.3, ram_cap: 64, storage: 0.004, storage_cap: 2000}
+  #     # gpu: points per 1000 G3D Mark of a graphics card (GTX 1070 ≈ 13500 → 6.75 points)
+  #     weights: {ram: 0.3, ram_cap: 64, storage: 0.004, storage_cap: 2000, gpu: 0.5}
   #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}
   #
   # Servers: rare names, so sort by relevance instead of newest first. Dual CPUs ("2x Xeon")
@@ -117,7 +119,7 @@ searches:
   #     min_cpu_mark: 5000
   #     require_cpu: true
   #     assume_ram_gb: 16
-  #     reject: [defect, lot, cpu_only]   # barebones are kept, scored with 0 GB RAM
+  #     reject: [defect, lot, cpu_only, offsite]   # barebones are kept, scored with 0 GB RAM
   #     shipping_estimate: 20
   #     weights: {ram: 0.2, ram_cap: 256, storage: 0.003, storage_cap: 8000}
   #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}

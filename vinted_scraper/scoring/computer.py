@@ -1,6 +1,6 @@
 """Value-for-money scorer for (mini) PCs.
 
-points = CPU performance + RAM + storage (+ bonuses), scaled by form factor
+points = CPU performance + RAM + storage + graphics card (+ bonuses), scaled by form factor
 cost   = price + buyer fees + estimated shipping + electricity over `years`
 
 so a cheap but power-hungry tower can lose to a slightly pricier 35 W Micro.
@@ -21,6 +21,7 @@ DEFAULT_WEIGHTS = {
     "storage_cap": 1000,  # ... counted up to this many GB
     "ssd_bonus": 1.0,
     "wifi_bonus": 0.0,
+    "gpu": 0.0,  # points per 1000 G3D Mark of a dedicated graphics card (0 = ignore the card)
 }
 DEFAULT_FORM_FACTOR = {"tiny": 1.15, "sff": 1.0, "tower": 0.8, "server": 0.8, "laptop": 0.9, "unknown": 0.95}
 # Idle watts on top of the CPU: PSU, fans, drive bays, a server's BMC.
@@ -49,6 +50,7 @@ class ComputerScorer:
         hours_per_day: float = 24.0,
         cpu_overrides: dict | None = None,
         extra_watts: dict | None = None,
+        gpu_overrides: dict | None = None,
     ):
         self.w = {**DEFAULT_WEIGHTS, **(weights or {})}
         self.form_factor = {**DEFAULT_FORM_FACTOR, **(form_factor or {})}
@@ -57,7 +59,7 @@ class ComputerScorer:
         self.assume_ram_gb = assume_ram_gb
         self.unknown_cpu_mark = unknown_cpu_mark
         self.require_cpu = require_cpu
-        self.reject = set(reject if reject is not None else ["defect", "lot", "cpu_only"])
+        self.reject = set(reject if reject is not None else ["defect", "lot", "cpu_only", "offsite"])
         self.barebone_factor = barebone_factor
         self.no_psu_penalty = no_psu_penalty
         self.shipping_estimate = shipping_estimate
@@ -66,6 +68,7 @@ class ComputerScorer:
         self.hours_per_day = hours_per_day
         self.cpu_overrides = cpu_overrides
         self.extra_watts = {**DEFAULT_EXTRA_WATTS, **(extra_watts or {})}
+        self.gpu_overrides = gpu_overrides
 
     def energy_cost(self, tdp: int, extra_watts: float = 0) -> float:
         idle = next((w for limit, w in IDLE_WATTS if tdp <= limit), IDLE_WATTS[-1][1] + (tdp - 65) * 0.2)
@@ -75,12 +78,12 @@ class ComputerScorer:
         return kwh * self.kwh_price
 
     def score(self, listing: Listing) -> Score:
-        specs = parse_specs(listing.text, self.cpu_overrides, title=listing.title)
+        specs = parse_specs(listing.text, self.cpu_overrides, title=listing.title, gpu_overrides=self.gpu_overrides)
         w = self.w
         cost = listing.effective_price + self.shipping_estimate
         summary = specs.summary()
 
-        for flag in ("defect", "lot", "cpu_only", "barebone", "no_psu"):
+        for flag in ("offsite", "defect", "lot", "cpu_only", "barebone", "no_psu"):
             if flag in self.reject and getattr(specs, flag):
                 return Score(0, cost, summary, reject=flag)
         if self.require_cpu and not specs.cpu:
@@ -93,7 +96,9 @@ class ComputerScorer:
         # A second socket adds a bit less than double the speed, but all of the power.
         mark = specs.cpu.mark * (1.9 if specs.cpus > 1 else 1) if specs.cpu else self.unknown_cpu_mark
         tdp = specs.cpu.tdp * specs.cpus if specs.cpu else 35
-        energy = self.energy_cost(tdp, self.extra_watts.get(specs.form_factor or "", 0))
+        # A graphics card idles even when its points are switched off, so it always costs power.
+        idle_extra = self.extra_watts.get(specs.form_factor or "", 0) + (specs.gpu.idle_watts if specs.gpu else 0)
+        energy = self.energy_cost(tdp, idle_extra)
         ram = specs.ram_gb if specs.ram_gb is not None else (0 if specs.barebone else self.assume_ram_gb)
         storage = specs.storage_gb or 0
 
@@ -102,6 +107,7 @@ class ComputerScorer:
         points += min(storage, w["storage_cap"]) * w["storage"]
         points += w["ssd_bonus"] if specs.ssd else 0
         points += w["wifi_bonus"] if specs.wifi else 0
+        points += specs.gpu.mark / 1000 * w["gpu"] if specs.gpu else 0
         points *= self.form_factor.get(specs.form_factor or "unknown", 1.0)
         if specs.barebone:
             points *= self.barebone_factor

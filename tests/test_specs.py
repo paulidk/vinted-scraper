@@ -174,3 +174,44 @@ def test_server_form_factor():
 def test_model_suffix_g_is_not_a_size(text, ram, storage):
     specs = parse_specs(text)
     assert (specs.ram_gb, specs.storage_gb) == (ram, storage)
+
+
+@pytest.mark.parametrize("title, gpu, ram, storage", [
+    ("Gaming PC GTX 1060 6GB i5-8400 16GB 512GB SSD", "gtx 1060 6gb", 16, 512),
+    ("Gaming PC mit GTX 980 4GB, Ryzen 5 3400G, 16GB RAM", "gtx 980", 16, None),
+    ("PC Gamer i7 6700 16 Go DDR4 stockage 500 Go GTX 970", "gtx 970", 16, 500),
+    ("Gaming PC Ryzen 5 5600 RTX 3060 Ti 16GB 1TB", "rtx 3060 ti", 16, 1000),
+    ("HP Z240 Workstation Xeon 32 GB RAM Quadro P2000 2 TB HDD", "quadro p2000", 32, 2000),
+    ("PC i5 RX 580 8GB 1TB", "rx 580", None, 1000),
+    ("PC i7 RTX 2070 Super 8GB GDDR6 32GB RAM", "rtx 2070 super", 32, None),
+    ("rx6600xt gaming pc i5-12400", "rx 6600 xt", None, None),
+    ("Fujitsu Primergy RX 100 S3", None, None, None),  # a server, not a Radeon
+    ("Mini PC Ryzen 5 5600G Vega 7", None, None, None),  # integrated graphics
+])
+def test_graphics_card_and_vram(title, gpu, ram, storage):
+    specs = parse_specs(title, title=title)
+    assert (specs.gpu.model if specs.gpu else None, specs.ram_gb, specs.storage_gb) == (gpu, ram, storage)
+
+
+def test_title_card_wins_over_description():
+    specs = parse_specs("Gaming PC RTX 3060\n\nAlte GTX 1080 Ti war vorher drin", title="Gaming PC RTX 3060")
+    assert specs.gpu.model == "rtx 3060"
+
+
+@pytest.mark.parametrize("title, part", [
+    ("MSI GTX 1060 6GB", True),
+    ("Grafikkarte GTX 1070 für Gaming PC", True),
+    ("Gaming PC GTX 1070 i7-8700 16GB", False),
+])
+def test_graphics_card_alone_is_a_part(title, part):
+    assert parse_specs(title, title=title).cpu_only is part
+
+
+@pytest.mark.parametrize("text, offsite", [
+    ("No payment by vinted !Gaming PC RTX 4080 SUPER Ryzen 5 7600X", True),
+    ("Gaming PC, Zahlung gerne per PayPal", True),
+    ("Kontakt über WhatsApp", True),
+    ("Gaming PC, Versand über Vinted", False),
+])
+def test_offsite_payment(text, offsite):
+    assert parse_specs(text).offsite is offsite
