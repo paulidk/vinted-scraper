@@ -32,6 +32,28 @@ value  = 100 × points / cost          → "points per 100 €", what everything
 - When the title has no CPU or RAM info, it fetches the item description (up to
   `fetch_details` per run) and caches it.
 
+## Top-3 alerts
+
+With `notify: {podium: 3}` a search keeps a ranking of its best 3 listings and sends it as one
+message only when that ranking changes: a better listing enters, the order changes, a listing
+on it gets cheaper, or one is sold. Each place says what changed (`new`, `up from #3`,
+`price drop`) and the message lists what dropped out.
+
+- **Every run re-scores the stored listings** with the current config, so a config change or a
+  parser fix also applies to listings that were scraped earlier.
+- Searches are sorted newest first, so a good listing soon falls off the first result page while
+  still being for sale. It stays ranked for `podium_hours` (default 72). A listing on the podium
+  that wasn't in this run's results is checked on its item page, and dropped if it's sold or
+  deleted. That's at most 2 × `podium` extra page loads per run.
+- When Vinted blocks a run, the podium is left as it is until the next clean run.
+- `min_value` still applies; `top` (alerts per run) doesn't.
+
+```bash
+python -m vinted_scraper -c config.yaml podium      # current top 3 of every search
+```
+
+The web UI's Deals tab shows the same podium for every search.
+
 Every weight is configurable per search in `config.yaml`.
 
 Try the scorer without scraping:
@@ -69,6 +91,7 @@ python -m vinted_scraper probe "https://www.vinted.de/catalog?search_text=optipl
 python -m vinted_scraper -c config.yaml once     # one run
 python -m vinted_scraper -c config.yaml run      # every 30 min, forever
 python -m vinted_scraper -c config.yaml top      # best items seen in the last 72h
+python -m vinted_scraper -c config.yaml podium   # current top 3 of every search
 python -m vinted_scraper -c config.yaml ui       # web page for editing the config
 ```
 

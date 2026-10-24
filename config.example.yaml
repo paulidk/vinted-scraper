@@ -48,6 +48,11 @@ searches:
       min_value: 8          # points per 100 EUR; use `vinted-scraper top` to calibrate
       top: 5                # max notifications per run
       price_drop: true
+      # Top-3 mode: instead of one alert per deal, keep a ranking of the best 3 listings and
+      # send it (as one message) only when it changes: something new enters, the order
+      # changes, a listing on it gets cheaper, or one is sold. 0 = one alert per deal.
+      podium: 3
+      podium_hours: 72      # items missing from search results stay ranked this long, if still for sale
     scorer:
       type: computer
       min_cpu_mark: 4500    # ~ i5-6500T; raise to e.g. 8000 for 8th gen+ only

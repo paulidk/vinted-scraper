@@ -160,15 +160,34 @@ def parse_catalog_page(html: str, base_url: str = "") -> dict | None:
     }
 
 
-def parse_item_description(html: str) -> str | None:
+@dataclass
+class ItemPage:
+    description: str = ""
+    available: bool | None = None  # None: the page didn't say
+
+
+def parse_item_page(html: str) -> ItemPage | None:
+    """Description and availability from the item page's JSON-LD product data."""
     for blob in _LD_JSON.findall(html):
         try:
             data = json.loads(blob)
         except ValueError:
             continue
-        if isinstance(data, dict) and data.get("description"):
-            return data["description"]
+        if not isinstance(data, dict) or data.get("@type") not in (None, "Product"):
+            continue
+        offers = data.get("offers")
+        availability = str(offers.get("availability") or "") if isinstance(offers, dict) else ""
+        return ItemPage(
+            description=data.get("description") or "",
+            # schema.org values, sometimes as a full URL: InStock, SoldOut, OutOfStock, ...
+            available=availability.rsplit("/", 1)[-1] == "InStock" if availability else None,
+        )
     return None
+
+
+def parse_item_description(html: str) -> str | None:
+    page = parse_item_page(html)
+    return page.description or None if page else None
 
 
 @dataclass
@@ -312,14 +331,21 @@ class VintedClient:
                 break
         return items[: per_page * pages]
 
-    def item_description(self, item_id: int | str) -> str | None:
-        """Best-effort fetch of a listing's description (not included in search results)."""
+    def item_page(self, item_id: int | str) -> ItemPage | None:
+        """Best-effort fetch of a listing's page; None when blocked or unreadable."""
         try:
             html = self.get_html(f"/items/{item_id}", referer=self.base_url + "/catalog")
         except BlockedError as exc:
             log.info("could not fetch details for %s: %s", item_id, exc)
             return None
-        return parse_item_description(html)
+        if not html:  # 404: the listing was deleted
+            return ItemPage(available=False)
+        return parse_item_page(html)
+
+    def item_description(self, item_id: int | str) -> str | None:
+        """Best-effort fetch of a listing's description (not included in search results)."""
+        page = self.item_page(item_id)
+        return page.description or None if page else None
 
 
 class _Retryable(Exception):

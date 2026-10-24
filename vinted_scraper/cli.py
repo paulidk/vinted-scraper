@@ -8,6 +8,8 @@ import sys
 from .client import ClientSettings, VintedClient, params_from_url
 from .config import load_config
 from .models import Listing
+from .notify import MEDALS
+from .ranking import ranked
 from .runner import Runner
 from .scoring import build_scorer
 from .storage import Store
@@ -25,6 +27,9 @@ def main(argv: list[str] | None = None) -> int:
     top.add_argument("search", nargs="?")
     top.add_argument("-n", type=int, default=15)
     top.add_argument("--hours", type=float, default=72)
+    podium = sub.add_parser("podium", help="show the current top listings of each search")
+    podium.add_argument("search", nargs="?")
+    podium.add_argument("-n", type=int, help="places (default: notify.podium of the search, else 3)")
     score = sub.add_parser("score", help="score a single title/description without scraping")
     score.add_argument("text")
     score.add_argument("--price", type=float, required=True)
@@ -66,8 +71,25 @@ def main(argv: list[str] | None = None) -> int:
         result = build_scorer(search.scorer).score(listing)
         print(json.dumps({**result.__dict__, "value": result.value}, indent=2))
         return 0
+    if args.command in ("top", "podium"):
+        store = Store(config.database)
+        searches = [s for s in config.searches if args.search in (None, s.name)]
+        if args.search and not searches:
+            print(f"no search named {args.search!r}", file=sys.stderr)
+            return 1
+    if args.command == "podium":
+        for search in searches:
+            n = args.n or search.notify.podium or 3
+            rows = ranked(store, search, search.notify.podium_hours, n, search.notify.min_value)
+            print(f"🏆 {search.name}" + ("" if rows else "  (nothing above min_value yet)"))
+            for i, row in enumerate(rows):
+                medal = MEDALS[i] if i < len(MEDALS) else f"#{i + 1}"
+                print(f"  {medal} {row['value']:6.1f}  {row['price']:>7g} {row['currency']}  {row['title']}")
+                print(f"           {row['summary']}\n           {row['url']}")
+        return 0
     if args.command == "top":
-        for row in Store(config.database).top(args.search, args.n, args.hours):
+        rows = sorted((r for s in searches for r in ranked(store, s, args.hours, args.n)), key=lambda r: -r["value"])
+        for row in rows[: args.n]:
             print(f"{row['value']:7.1f}  {row['price']:>7g} {row['currency']}  [{row['search']}] {row['title']}")
             print(f"         {row['summary']}\n         {row['url']}")
         return 0

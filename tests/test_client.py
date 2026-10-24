@@ -4,7 +4,7 @@ import pytest
 
 from vinted_scraper import client as client_mod
 from vinted_scraper.client import (BlockedError, ClientSettings, VintedClient, parse_catalog_page,
-                                   parse_item_description, params_from_url, url_params)
+                                   parse_item_description, parse_item_page, params_from_url, url_params)
 
 
 def catalog_html(items, total_pages=1):
@@ -126,3 +126,12 @@ def test_url_params_round_trip():
 def test_item_description_from_json_ld():
     html = '<script type="application/ld+json">{"@type":"Product","description":"i5-8500T, 16GB"}</script>'
     assert parse_item_description(html) == "i5-8500T, 16GB"
+
+
+@pytest.mark.parametrize("availability, expected", [
+    ("InStock", True), ("https://schema.org/InStock", True), ("SoldOut", False), ("OutOfStock", False), (None, None),
+])
+def test_item_page_availability(availability, expected):
+    offers = {"@type": "Offer", "price": 20} | ({"availability": availability} if availability else {})
+    html = f'<script type="application/ld+json">{json.dumps({"@type": "Product", "description": "x", "offers": offers})}</script>'
+    assert parse_item_page(html).available is expected

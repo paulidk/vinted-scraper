@@ -28,6 +28,9 @@ class NotifyRules:
     min_value: float = 0.0  # only notify items scoring at least this
     top: int = 5  # at most this many notifications per search per run
     price_drop: bool = True  # notify again when a known item gets cheaper
+    # >0: keep a ranking of the best N listings and alert only when it changes (replaces per-deal alerts)
+    podium: int = 0
+    podium_hours: float = 72  # an item missing from search results stays ranked this long (if still for sale)
 
 
 @dataclass
@@ -43,6 +46,17 @@ class SearchConfig:
     fetch_details: int = 0  # max descriptions fetched per run for items with missing specs
     scorer: dict = field(default_factory=dict)
     notify: NotifyRules = field(default_factory=NotifyRules)
+
+    def keeps(self, listing) -> bool:
+        if self.min_price is not None and listing.price < self.min_price:
+            return False
+        if self.max_price is not None and listing.price > self.max_price:
+            return False
+        if self.include and not self.include.search(listing.title):
+            return False
+        if self.exclude and self.exclude.search(f"{listing.title}\n{listing.description}"):
+            return False
+        return True
 
 
 @dataclass

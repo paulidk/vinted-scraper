@@ -23,6 +23,7 @@ import yaml
 from .config import load_config
 from .models import Listing
 from .notify import build_notifiers
+from .ranking import ranked
 from .scoring import build_scorer
 from .storage import Store
 
@@ -100,16 +101,38 @@ class App:
         result = scorer.score(listing)
         return {**result.__dict__, "value": result.value}
 
-    def top(self, search: str | None, limit: int, hours: float) -> list[dict]:
+    def _store(self):
         try:
-            database = load_config(self.config_path).database
-        except (OSError, ValueError, KeyError, TypeError):
-            database = (self.load_raw()[0] or {}).get("database", "data/vinted.db")
-        if not Path(database).exists():
+            config = load_config(self.config_path)
+        except (OSError, ValueError, KeyError, TypeError, re.error):
+            config = None
+        database = config.database if config else (self.load_raw()[0] or {}).get("database", "data/vinted.db")
+        return (Store(database) if Path(database).exists() else None), config
+
+    def top(self, search: str | None, limit: int, hours: float) -> list[dict]:
+        store, config = self._store()
+        if not store:
             return []
-        rows = Store(database).top(search or None, limit, hours)
-        keys = ("search", "title", "price", "currency", "value", "points", "cost", "summary", "url", "photo", "last_seen")
-        return [{k: row[k] for k in keys} for row in rows]
+        if not config:  # unreadable config: show the scores from the last run
+            return [_row(row) for row in store.top(search or None, limit, hours)]
+        rows = [r for s in config.searches if search in (None, "", s.name) for r in ranked(store, s, hours, limit)]
+        return [_row(r) for r in sorted(rows, key=lambda r: -r["value"])[:limit]]
+
+    def podium(self) -> list[dict]:
+        store, config = self._store()
+        if not store or not config:
+            return []
+        out = []
+        for search in config.searches:
+            rules = search.notify
+            rows = ranked(store, search, rules.podium_hours, rules.podium or 3, rules.min_value)
+            out.append({"search": search.name, "alerts": rules.podium > 0, "items": [_row(r) for r in rows]})
+        return out
+
+
+def _row(row) -> dict:
+    keys = ("search", "title", "price", "currency", "value", "points", "cost", "summary", "url", "photo", "last_seen")
+    return {k: row[k] for k in keys}
 
 
 def make_handler(app: App, allowed_hosts: set[str]):
@@ -163,6 +186,8 @@ def make_handler(app: App, allowed_hosts: set[str]):
                 q = parse_qs(url.query)
                 rows = app.top(q.get("search", [""])[0], int(q.get("n", ["50"])[0]), float(q.get("hours", ["72"])[0]))
                 return self._json({"items": rows})
+            if url.path == "/api/podium":
+                return self._json({"searches": app.podium()})
             self._send(HTTPStatus.NOT_FOUND, b"not found", "text/plain")
 
         def do_POST(self):

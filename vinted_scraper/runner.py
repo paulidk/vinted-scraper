@@ -8,9 +8,10 @@ import time
 from .client import BlockedError, VintedClient
 from .config import Config, SearchConfig
 from .models import Listing
-from .notify import Deal, build_notifiers
+from .notify import Deal, Podium, build_notifiers
+from .ranking import build_podium, changed, rescore
 from .scoring import Score, build_scorer
-from .storage import Store
+from .storage import Placed, Store
 
 log = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ class Runner:
         self.notifiers = build_notifiers(config.notifiers)
         self._client_factory = client_factory
         self._clients: dict[str, VintedClient] = {}
+        self._blocked: set[str] = set()  # searches whose fetch was cut short this run
 
     def client(self, domain: str) -> VintedClient:
         if domain not in self._clients:
@@ -32,6 +34,7 @@ class Runner:
     def fetch(self, search: SearchConfig) -> list[Listing]:
         client = self.client(search.domain)
         seen: dict[int, Listing] = {}
+        self._blocked.discard(search.name)
         for params in search.queries:
             try:
                 raw_items = client.search(params, pages=search.pages)
@@ -40,6 +43,7 @@ class Runner:
                 # the hole deeper. Keep what we have and try again next run.
                 log.error("[%s] blocked on %s, skipping the rest of this run: %s",
                           search.name, params.get("search_text") or params, exc)
+                self._blocked.add(search.name)
                 break
             log.info("[%s] %s: %d items", search.name, params.get("search_text") or "(no text)", len(raw_items))
             for raw in raw_items:
@@ -50,20 +54,10 @@ class Runner:
                 seen.setdefault(listing.id, listing)
         return list(seen.values())
 
-    def _keep(self, search: SearchConfig, listing: Listing) -> bool:
-        if search.min_price is not None and listing.price < search.min_price:
-            return False
-        if search.max_price is not None and listing.price > search.max_price:
-            return False
-        if search.include and not search.include.search(listing.title):
-            return False
-        if search.exclude and search.exclude.search(f"{listing.title}\n{listing.description}"):
-            return False
-        return True
-
-    def run_search(self, search: SearchConfig) -> list[Deal]:
+    def run_search(self, search: SearchConfig) -> list[Deal] | Podium | None:
+        """Returns new deals, or in podium mode the new podium (None if it didn't change)."""
         scorer = build_scorer(search.scorer)
-        listings = [item for item in self.fetch(search) if self._keep(search, item)]
+        listings = [item for item in self.fetch(search) if search.keeps(item)]
         scored: list[tuple[Listing, Score]] = []
         detail_budget = search.fetch_details
         failures: list[Exception] = []
@@ -97,8 +91,16 @@ class Runner:
             self.store.commit()
             raise RuntimeError(f"scoring failed for all {len(failures)} listings") from failures[-1]
 
-        deals: list[Deal] = []
         rules = search.notify
+        rescored = rescore(self.store, search, rules.podium_hours, skip={lst.id for lst, _ in scored}, scorer=scorer)
+        log.debug("[%s] rescored %d stored listings", search.name, rescored)
+        if rules.podium > 0:
+            podium = self.update_podium(search, {lst.id for lst, _ in scored})
+            self.store.commit()
+            log.info("[%s] %d listings, podium %s", search.name, len(scored), "changed" if podium else "unchanged")
+            return podium
+
+        deals: list[Deal] = []
         for listing, score in sorted(scored, key=lambda pair: pair[1].value, reverse=True):
             if score.reject or score.value < rules.min_value:
                 continue
@@ -117,18 +119,58 @@ class Runner:
                  f", {len(failures)} could not be scored" if failures else "")
         return deals
 
+    def update_podium(self, search: SearchConfig, seen: set[int]) -> Podium | None:
+        """Rank the best stored listings and return the podium if it differs from the last one sent."""
+        rules = search.notify
+        if search.name in self._blocked:
+            # Can't check whether missing items were sold; keep the last podium until a clean run.
+            log.info("[%s] blocked this run, podium not updated", search.name)
+            return None
+        # Items not in this run's results may have been sold (search is newest first, so older
+        # listings simply drop off the first page). Their item page tells us.
+        checks, checked = rules.podium * 2, set()
+        while True:
+            rows = self.store.top(search.name, rules.podium, rules.podium_hours, rules.min_value)
+            unverified = [r["id"] for r in rows if r["id"] not in seen and r["id"] not in checked]
+            if not unverified or checks <= 0:
+                break
+            for item_id in unverified[:checks]:
+                checks -= 1
+                checked.add(item_id)
+                page = self.client(search.domain).item_page(item_id)
+                if page is None or page.available is None:
+                    continue  # unknown: keep it ranked
+                if page.available:
+                    self.store.mark_seen(search.name, item_id)
+                else:
+                    log.info("[%s] %s is no longer for sale", search.name, item_id)
+                    self.store.mark_gone(search.name, item_id)
+
+        old = self.store.podium(search.name)
+        new = [Placed(r["id"], r["price"], r["title"]) for r in rows]
+        if not changed(old, new, rules.price_drop):
+            return None
+        self.store.save_podium(search.name, new)
+        for r in rows:
+            self.store.mark_notified(search.name, r["id"], r["price"])
+        return build_podium(search.name, rows, old) if rows else None
+
     def run_once(self) -> list[Deal]:
         all_deals: list[Deal] = []
         for search in self.config.searches:
             try:
-                deals = self.run_search(search)
+                result = self.run_search(search)
             except Exception:
                 log.exception("[%s] search crashed", search.name)
                 continue
-            all_deals += deals
-            if deals:
+            if isinstance(result, Podium):
+                all_deals += result.deals
                 for notifier in self.notifiers:
-                    notifier.send(deals)
+                    notifier.send_podium(result)
+            elif result:
+                all_deals += result
+                for notifier in self.notifiers:
+                    notifier.send(result)
         return all_deals
 
     def run_forever(self) -> None:

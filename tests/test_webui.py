@@ -91,3 +91,24 @@ def test_rejects_cross_site_and_rebinding(server):
     status, _ = call(base + "/api/config", {"config": GOOD}, {"Content-Type": "text/plain"})
     assert status == 400
     assert not cfg.exists()
+
+
+def test_podium_endpoint_rescores_with_saved_config(server):
+    from vinted_scraper.models import Listing
+    from vinted_scraper.scoring import Score
+    from vinted_scraper.storage import Store
+
+    base, cfg = server
+    db = cfg.parent / "vinted.db"
+    raw = {"database": str(db), "searches": [{"name": "pcs", "notify": {"podium": 3, "min_value": 1},
+                                              "scorer": {"type": "computer"}}]}
+    cfg.write_text(yaml.safe_dump(raw))
+    store = Store(db)
+    for i, title in enumerate(["M720q i5-8500T 16GB 256GB SSD", "NCT album", "OptiPlex 3060 Micro i3-8100T 8GB"]):
+        listing = Listing(id=i, title=title, price=100, currency="EUR", url=f"https://x/{i}")
+        store.upsert("pcs", listing, Score(points=50, cost=100))  # stale scores from an older config
+    store.commit()
+    [podium] = json.loads(call(base + "/api/podium")[1])["searches"]
+    assert podium["search"] == "pcs" and podium["alerts"] is True
+    assert [d["url"] for d in podium["items"]] == ["https://x/0", "https://x/2", "https://x/1"]
+    assert podium["items"][0]["value"] < 50

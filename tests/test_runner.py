@@ -1,7 +1,7 @@
 import copy
 
 from vinted_scraper.config import NotifyRules, SearchConfig, Config
-from vinted_scraper.client import ClientSettings
+from vinted_scraper.client import ClientSettings, ItemPage
 from vinted_scraper.runner import Runner
 
 
@@ -12,6 +12,8 @@ class FakeClient:
         self.descriptions = descriptions or {}
         self.searches = []
         self.detail_calls = []
+        self.availability = {}  # item id -> True/False, missing = page doesn't say
+        self.page_calls = []
 
     def search(self, params, pages=1):
         self.searches.append(params)
@@ -20,6 +22,10 @@ class FakeClient:
     def item_description(self, item_id):
         self.detail_calls.append(item_id)
         return self.descriptions.get(item_id)
+
+    def item_page(self, item_id):
+        self.page_calls.append(item_id)
+        return ItemPage(self.descriptions.get(item_id) or "", self.availability.get(item_id))
 
 
 def make_runner(tmp_path, items, descriptions=None, **search_kw):

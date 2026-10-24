@@ -30,7 +30,8 @@ ruff check --select E,F,W,B --ignore E501 .         # lint config used so far
 python -m vinted_scraper probe "https://www.vinted.de/catalog?search_text=optiplex"  # live check
 python -m vinted_scraper -v -c config.yaml once     # one full run with debug logging
 python -m vinted_scraper -c config.yaml run         # every interval_minutes, forever
-python -m vinted_scraper -c config.yaml top         # best items seen in the last 72h
+python -m vinted_scraper -c config.yaml top         # best items seen in the last 72h (rescored first)
+python -m vinted_scraper -c config.yaml podium      # current top-N of every search
 python -m vinted_scraper -c config.yaml ui          # config editor at http://localhost:8765
 python -m vinted_scraper -c config.yaml score "M720q i5-8500T 16GB 256GB" --price 100
 ```
@@ -49,7 +50,8 @@ nothing. Start there when scraping breaks.
 | `vinted_scraper/scoring/computer.py` | mini PC value scorer: points vs. price + fees + shipping + electricity |
 | `vinted_scraper/scoring/rules.py` | generic regex-points scorer; `type: price` = no rules = cheapest first |
 | `vinted_scraper/runner.py` | fetch → filter → score (+ optional description fetch) → store → notify |
-| `vinted_scraper/storage.py` | SQLite: seen items, cached descriptions, notified price (for price-drop alerts) |
+| `vinted_scraper/ranking.py` | rescoring stored listings with the current config; podium diff → `Podium` message |
+| `vinted_scraper/storage.py` | SQLite: seen items, cached descriptions, notified price, sold (`gone`), last podium per search |
 | `vinted_scraper/notify.py` | console, Discord, Telegram, ntfy, generic webhook |
 | `vinted_scraper/config.py` | YAML loading, `${VAR}` / `${VAR:-default}` expansion, search URL → params |
 | `vinted_scraper/webui.py` + `webui.html` | stdlib-only config editor, no CDN, works offline |
@@ -109,6 +111,16 @@ deliberately rough (rankings, not benchmarks). Users correct them with `cpu_over
   for the same reason.
 - Notifications: an item is notified once, and again only when its price drops below the
   last notified price. `notify.top` caps alerts per search per run.
+- **Rescoring:** every run (and `top`, `podium` and the web UI Deals tab) scores the stored listings
+  from the last `podium_hours` again with the current config and filters, so stale scores from
+  older configs or parser bugs never rank. Rows store `total_price`, `brand` and `condition` so the
+  rebuilt `Listing` matches a fresh one. Older rows lack `total_price`, so the buyer fee is estimated.
+- **Podium mode** (`notify.podium: N`, the user runs it with 3): replaces per-deal alerts. After
+  scoring, the best N (`min_value` applies) are compared with the last podium saved in the `podium`
+  table, and a `Podium` is sent via `Notifier.send_podium` only when the ids/order differ or (with
+  `price_drop`) a member got cheaper. Members missing from this run's results are checked with
+  `client.item_page` (JSON-LD `offers.availability`; a 404 means deleted). Sold ones get `gone` set
+  and are skipped until they show up in results again. A blocked run leaves the podium unchanged.
 
 ## Web UI security (`webui.py`)
 

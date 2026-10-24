@@ -61,6 +61,13 @@ th { font-size: 12px; color: var(--muted); font-weight: 500; }
 .deal .value { font-weight: 700; font-size: 16px; }
 .deal a { color: var(--text); }
 .scroll { overflow-x: auto; }
+.podiums { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.podiums .card { margin: 0; }
+.podiums h4 { margin: 0 0 8px; font-size: 14px; display: flex; gap: 8px; align-items: baseline; }
+.place { display: grid; grid-template-columns: 26px 1fr auto; gap: 8px; align-items: start; padding: 8px 0; border-top: 1px solid var(--border); }
+.place .medal { font-size: 20px; line-height: 1.1; }
+.place a { color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.place .value { font-weight: 700; font-size: 16px; text-align: right; white-space: nowrap; }
 @media (max-width: 600px) { .hide-sm { display: none; } main { padding: 12px; } }
 </style>
 </head>
@@ -306,7 +313,9 @@ function searchCard(s, i, open) {
     h("h3", {}, "Notifications"),
     h("div", { class: "grid" },
       field(notify, "min_value", "Min value to notify", { type: "number", placeholder: "0", hint: "points per 100 – check the Deals tab to calibrate" }),
-      field(notify, "top", "Max alerts per run", { type: "number", placeholder: "5" }),
+      field(notify, "top", "Max alerts per run", { type: "number", placeholder: "5", hint: "ignored with top-N alerts" }),
+      field(notify, "podium", "Top-N alerts", { type: "number", placeholder: "0", hint: "e.g. 3: alert only when the best 3 change; 0 = alert per deal" }),
+      field(notify, "podium_hours", "Keep ranked for (hours)", { type: "number", placeholder: "72", hint: "after an item last showed up in results" }),
       h("div", { class: "row" }, check(notify, "price_drop", "Alert again on price drop", true))),
     h("h3", {}, "Scoring"),
     h("div", { class: "grid" }, field(s.scorer, "type", "Scorer", { type: "select", default: "rules",
@@ -383,6 +392,21 @@ function yamlTab() {
     } }, "Apply to forms")))];
 }
 
+const MEDALS = ["🥇", "🥈", "🥉"];
+function podiums() {
+  const box = h("div", { class: "podiums" });
+  api("/api/podium").then((r) => box.replaceChildren(...(r.searches || []).map((p) => h("div", { class: "card" },
+    h("h4", {}, `🏆 ${p.search}`, h("span", { class: "muted", style: "font-weight:400;font-size:12px" },
+      p.alerts ? `top ${p.items.length || ""} alerts on` : "per-deal alerts")),
+    p.items.length ? p.items.map((d, i) => h("div", { class: "place" },
+      h("span", { class: "medal" }, MEDALS[i] || `#${i + 1}`),
+      h("div", {}, h("a", { href: d.url, target: "_blank", rel: "noopener noreferrer" }, d.title),
+        h("div", { class: "muted" }, `${d.price} ${d.currency} · ${d.summary}`)),
+      h("span", { class: "value" }, d.value.toFixed(1))))
+      : h("p", { class: "muted" }, "Nothing above the min value yet.")))));
+  return box;
+}
+
 function dealsTab() {
   const q = { search: "", hours: 72 };
   const list = h("div");
@@ -400,12 +424,12 @@ function dealsTab() {
           h("div", { class: "muted" }, `[${d.search}] ${d.summary}`))))))));
   };
   load();
-  return [h("div", { class: "card" },
+  return [podiums(), h("div", { class: "card" },
     h("div", { class: "grid" },
       h("label", { class: "f" }, "Search", h("select", { onchange: (e) => { q.search = e.target.value; load(); } },
         h("option", { value: "" }, "All"), cfg.searches.map((s) => h("option", { value: s.name }, s.name)))),
       h("label", { class: "f" }, "Seen in the last (hours)", h("input", { type: "number", value: q.hours, onchange: (e) => { q.hours = e.target.value || 72; load(); } }))),
-    h("p", { class: "muted" }, "The best listings the scraper has seen, using the scores from the last run. Use it to choose a good \"Min value to notify\"."),
+    h("p", { class: "muted" }, "The best listings the scraper has seen, scored with the saved config. Use it to choose a good \"Min value to notify\"."),
     list)];
 }
 
