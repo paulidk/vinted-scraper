@@ -198,6 +198,7 @@ const TEMPLATES = {
     kleinanzeigen: { category: 228, shipping: true }, min_price: 30, max_price: 500,
     fetch_details: 10, notify: { min_value: 5, podium: 3, price_drop: true },
     scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 12, weights: { gpu: 0.5 },
+      reject: ["defect", "lot", "cpu_only", "offsite", "barebone", "no_psu"],
       form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0 } } }),
   "Servers & workstations": () => ({ name: "servers", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true },
     queries: ["poweredge", "proliant", "supermicro", "xeon", "epyc", "primergy", "thinksystem", "rack server", "workstation", "dell precision", "hp z440", "thinkstation"],

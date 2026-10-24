@@ -247,6 +247,12 @@ def test_multi_offer_counts_as_lot(title, lot):
     ("Mini PC, no BIOS password, ohne Netzteil", False, False, True),
     ("Mini PC i5, RAM und SSD fehlen", False, True, False),
     ("Mini PC i5 16GB, alles dabei, nichts fehlt", False, False, False),
+    ("Optisch Gebrauchsspuren.\nKein Biospasswort\nKein Ram, Festplatte und Netzteil", False, True, True),
+    ("Lenovo M920q ohne Netzteil, RAM und SSD", False, True, True),
+    ("Mini PC, keine Festplatte", False, True, False),
+    ("Sold without PSU or RAM", False, True, True),
+    ("Kein Kratzer, Netzteil dabei, 16GB RAM", False, False, False),
+    ("Kein Betriebssystem installiert, 8GB RAM, 256GB SSD", False, False, False),
 ])
 def test_missing_parts_and_negated_bios_lock(text, defect, barebone, no_psu):
     specs = parse_specs(text)

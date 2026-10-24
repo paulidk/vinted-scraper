@@ -109,7 +109,7 @@ searches:
   #     min_cpu_mark: 6000
   #     require_cpu: true
   #     min_ram_gb: 8
-  #     reject: [defect, lot, cpu_only, offsite]
+  #     reject: [defect, lot, cpu_only, offsite, barebone, no_psu]
   #     shipping_estimate: 12
   #     # gpu: points per 1000 G3D Mark of a graphics card (GTX 1070 ≈ 13500 → 6.75 points)
   #     weights: {ram: 0.3, ram_cap: 64, storage: 0.004, storage_cap: 2000, gpu: 0.5}

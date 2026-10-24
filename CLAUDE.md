@@ -125,6 +125,10 @@ RAM vs. storage is the hard part. The current design (commit `d7b6afa`):
    keyword. Otherwise "upgradable 16GB/64GB" or "max 8GB/32GB" would count as installed specs.
 4. Storage fallback: an unassigned size ≥120 GB or in TB.
 
+Missing parts: `_MISSING` matches "kein/ohne/without/no" followed by a list of parts, so
+"Kein Ram, Festplatte und Netzteil" sets both `barebone` and `no_psu`. The user's desktops and
+mini-pc searches reject both; servers only penalise barebones (often sold without disks).
+
 Known limitation: when several sizes each sit next to a RAM keyword, the largest wins, so
 "8GB RAM, upgradable to 32GB RAM" counts as 32 GB. Fixing it means recognising "upgradable",
 "max", "bis zu", ... near a size.

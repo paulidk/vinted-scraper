@@ -46,17 +46,24 @@ DEFECT = re.compile(
     # a BIOS lock counts, "kein BIOS Passwort" / "no BIOS password" doesn't
     r"|(?<!kein )(?<!keine )(?<!no )(?<!ohne )(?<!sans )(?<!nessuna )\bbios\s*(?:lock|locked|password|passwort|mot\s*de\s*passe)\b"
 )
+# "Kein Ram, Festplatte und Netzteil", "ohne Netzteil, RAM und SSD", "without PSU, RAM or SSD":
+# a "missing" word followed by a list of parts, so each part counts wherever it sits in the list.
+_PART_WORD = (r"(?:ram|ssd|hdd|nvme|festplatte|arbeitsspeicher|speicher|netzteil|ladeger[aä]t|ladekabel|psu|"
+              r"power\s*supply|storage|drive|disk)")
+_MISSING = rf"\b(?:ohne|keine?[nm]?|without|no)\s+(?:{_PART_WORD}\s*(?:,|und|and|&|/|\+|oder|or)?\s*)*"
 BAREBONE = re.compile(
     r"\b(barebone|ohne\s*(?:ram|ssd|festplatte|hdd|speicher)|sans\s*(?:ram|ssd|disque|stockage|m[ée]moire)|"
     r"no\s*(?:ram|ssd|hdd|storage|drive)|without\s*(?:ram|ssd|hdd|storage)|bez\s*(?:ram|dysku|ssd)|"
     r"senza\s*(?:ram|ssd|disco)|sin\s*(?:ram|ssd|disco)|zonder\s*(?:ram|ssd|schijf))\b"
     # "Es fehlt: Ram, Netzteil, SSD", "RAM und SSD fehlen"
     r"|\bfehl(?:t|en)\s*:?[^.\n]{0,25}\b(?:ram|ssd|festplatte|arbeitsspeicher)\b|\b(?:ram|ssd|festplatte)\b[^.\n]{0,15}\bfehl(?:t|en)\b"
+    rf"|{_MISSING}(?:ram|ssd|hdd|nvme|festplatte|arbeitsspeicher|storage|drive|disk)\b"
 )
 NO_PSU = re.compile(
     r"\b(ohne\s*(?:netzteil|ladeger[aä]t)|sans\s*(?:alimentation|chargeur)|no\s*(?:psu|power\s*(?:supply|adapter)|charger)|"
     r"without\s*(?:psu|power\s*(?:supply|adapter)|charger)|bez\s*zasilacza|senza\s*alimentatore|sin\s*cargador)\b"
     r"|\bfehl(?:t|en)\s*:?[^.\n]{0,25}\b(?:netzteil|ladeger[aä]t)\b|\b(?:netzteil|ladeger[aä]t)\b[^.\n]{0,15}\bfehl(?:t|en)\b"
+    rf"|{_MISSING}(?:netzteil|ladeger[aä]t|psu|power\s*supply)\b"
 )
 LOT = re.compile(r"\b(lot\s*(?:de|of)?\s*\d|[2-9]\d*\s*(?:x\s*)?(?:pcs|pieces|pièces|stück|stk|szt))\b")
 # A loose processor rather than a computer: a socket, an Intel sSpec code or "Prozessor" in the title...
