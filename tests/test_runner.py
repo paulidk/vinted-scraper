@@ -165,3 +165,17 @@ def test_pages_deep_once_then_only_until_known_listings(tmp_path, catalog_items)
     runner.config.searches[0].pages = 12
     runner.run_once()
     assert stops[4:] == [None, None]  # raised `pages`: one more full pass
+
+
+def test_snippet_description_is_completed_once(tmp_path, catalog_items):
+    items = copy.deepcopy(catalog_items)
+    vague = next(i for i in items if i["id"] == 105)
+    vague.update(description="Schneller Rechner, gepflegt...", description_partial=True)
+    runner, fake = make_runner(tmp_path, items, descriptions={105: "Schneller Rechner, gepflegt. i7-8700T, 32GB RAM, 1TB NVMe"},
+                               fetch_details=5)
+    deals = {d.url.rsplit("/", 1)[1]: d for d in runner.run_once()}
+    assert fake["c"].detail_calls == [105] and "i7-8700t" in deals["105"].summary
+    fake["c"].detail_calls.clear()
+    runner.run_once()
+    assert fake["c"].detail_calls == []  # the stored full text beats the snippet from search results
+    assert "32GB" in runner.store.previous("pcs", 105).description

@@ -4,10 +4,14 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
 from .client import ClientSettings, params_from_url
+from .kleinanzeigen import DOMAIN as KLEINANZEIGEN, is_kleinanzeigen
+
+SITES = {"vinted", "kleinanzeigen"}
 
 _ENV = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
 
@@ -70,10 +74,18 @@ class Config:
 
 
 def _search(raw: dict, default_domain: str) -> SearchConfig:
-    domain = raw.get("domain", default_domain)
+    site = raw.get("site", "vinted")
+    if site not in SITES:
+        raise ValueError(f"search {raw.get('name')!r}: unknown site {site!r}; choose from {sorted(SITES)}")
+    domain = raw.get("domain") or (KLEINANZEIGEN if site == "kleinanzeigen" else default_domain)
     base = {k: v for k, v in (raw.get("params") or {}).items()}
     queries: list[dict] = []
     for url in [raw["url"]] if "url" in raw else raw.get("urls", []):
+        if is_kleinanzeigen(url):
+            # Kleinanzeigen keeps its filters in the path: keep it whole and only add the page.
+            domain = urlparse(url).netloc or KLEINANZEIGEN
+            queries.append({**base, "path": urlparse(url).path})
+            continue
         url_domain, params = params_from_url(url)
         domain = url_domain or domain
         queries.append({**base, **params})

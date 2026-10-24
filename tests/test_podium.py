@@ -184,3 +184,15 @@ def test_ranking_for_display_works_while_a_scrape_holds_the_write_lock(tmp_path,
         assert [r["id"] for r in ranked(viewer, search, limit=3)] == [101, 102]
     finally:
         writer.rollback()
+
+
+def test_availability_check_completes_the_description(tmp_path, catalog_items):
+    runner, _, rec = podium_runner(tmp_path, catalog_items)
+    runner.run_once()
+    runner2, fake2, rec2 = podium_runner(tmp_path, catalog_items[1:])
+    client = runner2.client("www.vinted.de")
+    client.availability = {101: True}
+    client.descriptions = {101: "Dell OptiPlex 7060 Micro, i5-8500T, 16GB RAM, 256GB SSD, defekt: startet nicht"}
+    runner2.run_once()
+    assert "startet nicht" in runner2.store.listing("pcs", 101).description
+    assert ids(rec2.podiums[0]) == [102, 105]  # the full text showed it is broken

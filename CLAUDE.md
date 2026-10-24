@@ -44,6 +44,7 @@ nothing. Start there when scraping breaks.
 | File | Role |
 |---|---|
 | `vinted_scraper/client.py` | curl_cffi HTTP client, Cloudflare handling, catalog-page and item-page parsing |
+| `vinted_scraper/kleinanzeigen.py` | Kleinanzeigen client: search paths, Astro island parsing, listing page (description, reserved/deleted) |
 | `vinted_scraper/models.py` | `Listing` built from a normalized item dict |
 | `vinted_scraper/scoring/cpu_db.py` | ~380 CPUs (mini PC, desktop, Xeon, EPYC) → approx. PassMark + TDP, estimation for unknown models |
 | `vinted_scraper/scoring/gpu_db.py` | ~120 graphics cards → approx. G3D Mark, idle watts |
@@ -81,6 +82,25 @@ nothing. Start there when scraping breaks.
   don't prove it works live. Verify against the live site with `probe`. The cloud sandbox
   this was first written in could not reach vinted.de at all, so the scraping code was fixed
   from live responses captured on the user's machine.
+
+## Kleinanzeigen (`kleinanzeigen.py`)
+
+Second source, chosen per search with `site: kleinanzeigen` (sets `domain` www.kleinanzeigen.de;
+`runner.make_client` picks the client class by domain). Verified live on 2026-10-24:
+
+- Search results are an Astro page. The `astro-island` whose `props` contain `resultAds` holds every
+  listing (id, title, description snippet ending in "...", seoLink, price text like "120 € VB",
+  locationName/parentLocationName, shippingAvailableValue, posterType, imageList), encoded as
+  `[type, value]` pairs (type 1 = array). Sponsored slots have no `organicAdPreview`.
+- Paths: `/s-<filters>/<query>/k0c<cat>[l<loc>r<km>]`, filters `anzeige:angebote` (no "Gesuche"),
+  `preis:min:max`, `versand:ja`, `anbieter:privat`, `seite:N`. Newest first is the default.
+  25 listings per page plus top ads. Pasted URLs keep their path; `seite:N` goes before the query.
+- `/s-anzeige/<id>` works without the slug; a deleted listing redirects to `/`. Full description is
+  `#viewad-description-text`. Reserved listings are detected by "Reserviert" in the h1.
+- `Listing.partial_description` marks the snippet: the runner fetches the full text when specs are
+  missing, and a longer stored description wins over the snippet afterwards.
+- `Listing.extra` ("06112 Halle · nur Abholung · VB") is stored and shown in alerts.
+- PayPal is normal there, so Kleinanzeigen searches must not reject `offsite`.
 
 ## Spec parsing rules (`specs.py`)
 

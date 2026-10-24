@@ -128,6 +128,11 @@ def test_flags():
     ("Bundle Xeon X5690 + Gigabyte X58A UD7 + 48 GB ddr3", True),
     ("19\" Server mit Gigabyte MJ11 Mainboard & Amd Epyc / 40GB Ram", False),
     ("Bayern Kit 2008/2009", False),
+    ("AMD Ryzen 7 5800X + MSI B550-A Pro + 32GB Corsair DDR4 RAM", True),
+    ("i5 6500  Fujitsu H110", True),
+    ("Dell Raid H330", True),
+    ("ASRock Jupiter X600 Barebone – sehr wenig benutzt", False),
+    ("MSi Cubi N (MS-B120) 8GB, 128GB SSD, Win11", False),
     ("Kit GAMER Turbo Unlock - 64Go RAM - cpu Intel Xeon 10 cores 20 threads", True),
     ("Bundle server HP ProLiant DL380p Gen8 - doppia cpu Intel Xeon + 128gb ram DDR3 ECC", False),
     ("Dell PowerEdge R320 Server Xeon E5-2470 v2 10-Core 96GB DDR3 ECC RAM", False),
@@ -215,3 +220,25 @@ def test_graphics_card_alone_is_a_part(title, part):
 ])
 def test_offsite_payment(text, offsite):
     assert parse_specs(text).offsite is offsite
+
+
+@pytest.mark.parametrize("title, lot", [
+    ("Tiny PCs / Dell Lenovo HP Fujitsu / Intel i3 i5 i7 Ryzen 3 5 Pro", True),
+    ("Mini PCs ab 79 € - große Auswahl", True),
+    ("Lenovo ThinkCentre M90q i5-10500T", False),
+    ("Dell OptiPlex 7060 Micro, mit diversem Zubehör", False),
+])
+def test_multi_offer_counts_as_lot(title, lot):
+    assert parse_specs(f"{title}\n\nVerschiedene Kabel dabei", title=title).lot is lot
+
+
+@pytest.mark.parametrize("text, defect, barebone, no_psu", [
+    ("Optisch Gebrauchsspuren.\nEs fehlt: Ram, Netzteil, SSD\n\nKein Bios Passwort", False, True, True),
+    ("ThinkCentre M720q, BIOS Passwort gesetzt", True, False, False),
+    ("Mini PC, no BIOS password, ohne Netzteil", False, False, True),
+    ("Mini PC i5, RAM und SSD fehlen", False, True, False),
+    ("Mini PC i5 16GB, alles dabei, nichts fehlt", False, False, False),
+])
+def test_missing_parts_and_negated_bios_lock(text, defect, barebone, no_psu):
+    specs = parse_specs(text)
+    assert (specs.defect, specs.barebone, specs.no_psu) == (defect, barebone, no_psu)

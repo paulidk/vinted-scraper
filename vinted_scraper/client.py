@@ -202,6 +202,8 @@ class ClientSettings:
 
 
 class VintedClient:
+    WARMUP_COOKIE: str | None = "access_token_web"  # set by the homepage visit; its absence predicts 401s
+
     def __init__(self, settings: ClientSettings | None = None):
         self.settings = settings or ClientSettings()
         self._session: requests.Session | None = None
@@ -247,8 +249,8 @@ class VintedClient:
         if _is_blocked(resp):
             session.close()
             raise _Retryable(f"homepage blocked (HTTP {resp.status_code})")
-        if "access_token_web" not in session.cookies:
-            log.warning("no access_token_web cookie after warm-up; API calls may return 401")
+        if self.WARMUP_COOKIE and self.WARMUP_COOKIE not in session.cookies:
+            log.warning("no %s cookie after warm-up; API calls may return 401", self.WARMUP_COOKIE)
         return session
 
     def close(self) -> None:

@@ -1,6 +1,6 @@
 # vinted-scraper
 
-Watches Vinted searches every 30 minutes, scores each listing by **value for money**, and
+Watches Vinted (and Kleinanzeigen.de) searches every 30 minutes, scores each listing by **value for money**, and
 notifies you (console / Discord / Telegram / ntfy / webhook) about the best new deals and
 price drops.
 
@@ -57,6 +57,26 @@ Loose CPUs, mainboards, RAID controllers and graphics cards on their own are ski
 (`reject: cpu_only`), and so are listings that ask you to pay outside Vinted (`reject: offsite`:
 "no payment by Vinted", PayPal, WhatsApp, bank transfer). Those come with no buyer protection and
 are the usual bait behind a too-good price like an RTX 4080 PC for 400 €.
+
+## Kleinanzeigen
+
+A search with `site: kleinanzeigen` runs on Kleinanzeigen.de with the same scoring, re-scoring and
+top-3 alerts. Without search terms it takes a whole category (`params: {category: 228}` = PCs).
+
+- `shipping: true` keeps only listings with "Versand möglich"; most others are pickup only. To
+  search around your town instead, set your location and radius on the website and paste the URL
+  (`url: https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50`).
+- `seller: privat` skips commercial sellers.
+- Alerts show where the item is, whether it ships, and "VB" (price negotiable).
+- There's no Vinted buyer fee. Search results only include the start of a description, so the
+  rest is fetched (within `fetch_details`) when specs are missing.
+- Leave `offsite` out of `reject` there: PayPal is the normal way to pay on Kleinanzeigen.
+- Kleinanzeigen's terms of use don't allow automated access, just like Vinted's. Keep the run
+  interval and page counts low, for personal use only.
+
+```bash
+python -m vinted_scraper probe "https://www.kleinanzeigen.de/s-pcs/anzeige:angebote/versand:ja/c228"
+```
 
 ## Top-3 alerts
 

@@ -39,17 +39,21 @@ FORM_FACTORS = {
 
 DEFECT = re.compile(
     r"\b(defekt|defect|defective|kaputt|broken|for\s*parts|pour\s*pi[eè]ces|ne\s*(?:fonctionne|marche)\s*pas|"
-    r"uszkodzon\w*|guasto|rott[oa]|no\s*funciona|niet\s*werkend|nefunk\w*|"
-    r"bios\s*(?:lock|locked|password|passwort|mot\s*de\s*passe)|ersatzteil\w*|bastler)\b"
+    r"uszkodzon\w*|guasto|rott[oa]|no\s*funciona|niet\s*werkend|nefunk\w*|ersatzteil\w*|bastler)\b"
+    # a BIOS lock counts, "kein BIOS Passwort" / "no BIOS password" doesn't
+    r"|(?<!kein )(?<!keine )(?<!no )(?<!ohne )(?<!sans )(?<!nessuna )\bbios\s*(?:lock|locked|password|passwort|mot\s*de\s*passe)\b"
 )
 BAREBONE = re.compile(
     r"\b(barebone|ohne\s*(?:ram|ssd|festplatte|hdd|speicher)|sans\s*(?:ram|ssd|disque|stockage|m[ée]moire)|"
     r"no\s*(?:ram|ssd|hdd|storage|drive)|without\s*(?:ram|ssd|hdd|storage)|bez\s*(?:ram|dysku|ssd)|"
     r"senza\s*(?:ram|ssd|disco)|sin\s*(?:ram|ssd|disco)|zonder\s*(?:ram|ssd|schijf))\b"
+    # "Es fehlt: Ram, Netzteil, SSD", "RAM und SSD fehlen"
+    r"|\bfehl(?:t|en)\s*:?[^.\n]{0,25}\b(?:ram|ssd|festplatte|arbeitsspeicher)\b|\b(?:ram|ssd|festplatte)\b[^.\n]{0,15}\bfehl(?:t|en)\b"
 )
 NO_PSU = re.compile(
     r"\b(ohne\s*(?:netzteil|ladeger[aä]t)|sans\s*(?:alimentation|chargeur)|no\s*(?:psu|power\s*(?:supply|adapter)|charger)|"
     r"without\s*(?:psu|power\s*(?:supply|adapter)|charger)|bez\s*zasilacza|senza\s*alimentatore|sin\s*cargador)\b"
+    r"|\bfehl(?:t|en)\s*:?[^.\n]{0,25}\b(?:netzteil|ladeger[aä]t)\b|\b(?:netzteil|ladeger[aä]t)\b[^.\n]{0,15}\bfehl(?:t|en)\b"
 )
 LOT = re.compile(r"\b(lot\s*(?:de|of)?\s*\d|[2-9]\d*\s*(?:x\s*)?(?:pcs|pieces|pièces|stück|stk|szt))\b")
 # A loose processor rather than a computer: a socket, an Intel sSpec code or "Prozessor" in the title...
@@ -69,7 +73,7 @@ CPU_FIRST = re.compile(r"^\W*(cpu|processor|prozessor|processeur|processore|proc
 # ...unless the title also names a whole machine: what it is, its model line, a maker or a RAM/storage size.
 MACHINE_NOUN = re.compile(
     r"\b(pc|computer|rechner|ordinateur|ordenador|komputer|desktop|tower|sff|micro|tiny|mini|nuc\w*|laptop|notebook|"
-    r"thin\s*client|workstation|nas|rack|[124]\s*u|microserver)\b|\b19\s*(?:\"|zoll|inch)"
+    r"thin\s*client|workstation|nas|rack|[124]\s*u|microserver|barebone)\b|\b19\s*(?:\"|zoll|inch)"
 )
 SERVER_WORD = re.compile(r"\b(server|serveur|servidor|serwer|homeserver)\b")
 MODEL_LINE = re.compile(
@@ -88,6 +92,9 @@ _BOARD = r"(x58|x79|x99|x299|c602|c612)\w*|mainboard|motherboard|mobo|carte\s*m[
 KIT = re.compile(rf"\b(kit|bundle)\b.*\b({_BOARD})\b|\b({_BOARD})\b.*\b(kit|bundle)\b")
 # "Kit GAMER - 64Go RAM - cpu Intel Xeon 10 cores": a kit of CPU and RAM is still not a machine
 KIT_PARTS = re.compile(r"\b(kit|bundle)\b.*\b(cpu|processeur|prozessor|processore|ram|ddr\d)\b")
+# Desktop chipsets name a board when the title has no PC word and no storage:
+# "AMD Ryzen 7 5800X + MSI B550-A Pro + 32GB" (but not "MSI Cubi N (MS-B120) 8GB, 128GB SSD").
+CHIPSET = re.compile(r"\b[abhqxz][1-9][0-9]0m?\b")
 DISK = re.compile(r"\b(ssd|hdd|nvme|m\.?2|disk|disque|festplatte|\d+\s*(?:tb|to))\b")
 BUNDLED = re.compile(r"\+|&|\b(mit|with|avec|con|und|et|inkl\w*|incl\w*)\b")
 RAM = re.compile(r"\b(ram|ddr\d|\d+\s*(?:gb|go)\b)")
@@ -97,6 +104,12 @@ OFFSITE = re.compile(
     r"(?:by|via|über|ueber|par|sur|tramite|con|per)?\s*vinted"
     r"|\b(paypal|pay\s*pal|whats\s*app|telegram|western\s*union|überweisung|virement|bonifico|bank\s*transfer|"
     r"f&f|friends\s*(?:and|&)\s*family)\b"
+)
+# One listing for several different machines ("Tiny PCs / Dell Lenovo HP / i3 i5 i7", "ab 99 €"):
+# the price is only a starting price, so it's treated like a lot. Checked on the title only.
+MULTI_OFFER = re.compile(
+    r"\b(verschiedene|diverse|auswahl|mehrere|various|several|plusieurs|divers)\b|\bab\s*\d+\s*(?:€|eur)|"
+    r"(?:\bi[3579]\b[^\n]{0,15}){3}|(?:\b(?:dell|lenovo|hp|fujitsu|acer|asus)\b[^\n]{0,12}){3}"
 )
 WIFI = re.compile(r"\b(wi-?fi|wlan|802\.11)\b")
 
@@ -261,16 +274,17 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "", g
     specs.defect = bool(DEFECT.search(t))
     specs.barebone = bool(BAREBONE.search(t))
     specs.no_psu = bool(NO_PSU.search(t))
-    specs.lot = bool(LOT.search(t))
+    head = (title or text.split("\n", 1)[0]).lower()
+    specs.lot = bool(LOT.search(t) or MULTI_OFFER.search(head))
     specs.offsite = bool(OFFSITE.search(t))
     specs.cpus = cpu_count(t) if specs.cpu else 1
-    head = (title or text.split("\n", 1)[0]).lower()
     noun, server, line, maker = (rx.search(head) for rx in (MACHINE_NOUN, SERVER_WORD, MODEL_LINE, MAKER))
     cpu = lookup(head, cpu_overrides)
     head_gpu = find_gpus(head, gpu_overrides)
     specs.cpu_only = bool(
         # "Carte mère serveur Supermicro" is a board, "19\" Server mit Gigabyte Mainboard" a server
         ((part := PART.search(head)) and not (noun or line) and not (server and server.start() < part.start()))
+        or (CHIPSET.search(head) and not (noun or server or line or DISK.search(head)))
         or (KIT.search(head) and not line)  # "Kit Serveur/Workstation X99 Xeon + 64Go RAM"
         or (KIT_PARTS.search(head) and not (noun or server or line))
         or (GPU_FIRST.search(head) and not line)

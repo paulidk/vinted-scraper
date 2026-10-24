@@ -125,6 +125,28 @@ searches:
   #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}
   #     # extra_watts: {server: 35, tower: 5}
 
+  # ------------------------------------------- Kleinanzeigen.de as a second source
+  # Same scoring, different site: `site: kleinanzeigen`. Without search terms it takes the
+  # whole category (228 PCs, 225 PC accessories, 278 notebooks). Most listings there are
+  # pickup only, so either keep `shipping: true` or paste a search URL from your browser
+  # with your town and radius in it (url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50").
+  # Leave `offsite` out of `reject`: paying by PayPal is normal on Kleinanzeigen.
+  # - name: kleinanzeigen-pcs
+  #   site: kleinanzeigen
+  #   params: {category: 228, shipping: true}   # also: seller: privat
+  #   min_price: 30
+  #   max_price: 500
+  #   fetch_details: 10
+  #   notify: {min_value: 5, podium: 3}
+  #   scorer:
+  #     type: computer
+  #     min_cpu_mark: 6000
+  #     require_cpu: true
+  #     reject: [defect, lot, cpu_only]
+  #     shipping_estimate: 8
+  #     weights: {ram: 0.3, ram_cap: 64, storage: 0.004, storage_cap: 2000, gpu: 0.5}
+  #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}
+
   # ------------------------------------------- any other search: rules scorer
   # - name: lego-technic
   #   query: lego technic

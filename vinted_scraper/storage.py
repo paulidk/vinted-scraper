@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS podium (
 );
 """
 # Added after the first release; existing databases get them on open.
-COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL"}
+COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL", "extra": "TEXT"}
 
 
 @dataclass
@@ -72,6 +72,7 @@ def listing_from_row(row: sqlite3.Row) -> Listing:
         id=row["id"], title=row["title"] or "", price=row["price"], currency=row["currency"] or "EUR",
         url=row["url"] or "", total_price=total, brand=row["brand"] or "",
         condition=row["condition"] or "", photo=row["photo"] or "", description=row["description"] or "",
+        extra=row["extra"] or "",
     )
 
 
@@ -97,18 +98,18 @@ class Store:
         # Showing up in search results means it's for sale, so `gone` is cleared.
         self.db.execute(
             """INSERT INTO items (search, id, title, price, currency, cost, points, value, summary, url, photo,
-                                  description, reject, first_seen, last_seen, total_price, brand, condition)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                  description, reject, first_seen, last_seen, total_price, brand, condition, extra)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT (search, id) DO UPDATE SET
                  title=excluded.title, price=excluded.price, cost=excluded.cost, points=excluded.points,
                  value=excluded.value, summary=excluded.summary, photo=excluded.photo,
                  description=COALESCE(NULLIF(excluded.description, ''), items.description),
                  reject=excluded.reject, last_seen=excluded.last_seen, total_price=excluded.total_price,
-                 brand=excluded.brand, condition=excluded.condition, gone=NULL""",
+                 brand=excluded.brand, condition=excluded.condition, extra=excluded.extra, gone=NULL""",
             (search, listing.id, listing.title, listing.price, listing.currency, score.cost, score.points,
              score.value, score.summary, listing.url, listing.photo, listing.description, score.reject, now, now,
              # Never NULL for new rows: NULL marks rows stored before the column existed.
-             listing.total_price or listing.price, listing.brand, listing.condition),
+             listing.total_price or listing.price, listing.brand, listing.condition, listing.extra),
         )
 
     def rows(self, search: str, max_age_hours: float | None = None) -> list[sqlite3.Row]:
@@ -122,6 +123,13 @@ class Store:
 
     def listings(self, search: str, max_age_hours: float | None = None) -> list[Listing]:
         return [listing_from_row(row) for row in self.rows(search, max_age_hours)]
+
+    def listing(self, search: str, item_id: int) -> Listing | None:
+        row = self.db.execute("SELECT * FROM items WHERE search=? AND id=?", (search, item_id)).fetchone()
+        return listing_from_row(row) if row else None
+
+    def set_description(self, search: str, item_id: int, description: str) -> None:
+        self.db.execute("UPDATE items SET description=? WHERE search=? AND id=?", (description, search, item_id))
 
     def update_score(self, search: str, item_id: int, score) -> None:
         self.db.execute(

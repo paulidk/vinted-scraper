@@ -4,9 +4,11 @@ import argparse
 import json
 import logging
 import sys
+from urllib.parse import urlparse
 
 from .client import ClientSettings, VintedClient, params_from_url
 from .config import load_config
+from .kleinanzeigen import KleinanzeigenClient, is_kleinanzeigen
 from .models import Listing
 from .notify import MEDALS
 from .ranking import ranked
@@ -37,7 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     ui = sub.add_parser("ui", help="web page for editing the config and browsing deals")
     ui.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 to reach it from other devices (exposes your tokens)")
     ui.add_argument("--port", type=int, default=8765)
-    probe = sub.add_parser("probe", help="fetch one search URL and print raw results (connectivity check)")
+    probe = sub.add_parser("probe", help="fetch one Vinted or Kleinanzeigen search URL and print the results (connectivity check)")
     probe.add_argument("url")
 
     args = parser.parse_args(argv)
@@ -47,9 +49,13 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.command == "probe":
-        domain, params = params_from_url(args.url)
-        client = VintedClient(ClientSettings(domain=domain or "www.vinted.de", min_delay=1, max_delay=2))
-        items = client.search(params, per_page=20)
+        if is_kleinanzeigen(args.url):
+            client = KleinanzeigenClient(ClientSettings(domain=urlparse(args.url).netloc, min_delay=1, max_delay=2))
+            items = client.search({"path": urlparse(args.url).path})
+        else:
+            domain, params = params_from_url(args.url)
+            client = VintedClient(ClientSettings(domain=domain or "www.vinted.de", min_delay=1, max_delay=2))
+            items = client.search(params, per_page=20)
         for item in items:
             listing = Listing.from_api(item)
             print(f"{listing.price:>8g} {listing.currency}  {listing.title}  {listing.url}")

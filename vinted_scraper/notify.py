@@ -23,6 +23,7 @@ class Deal:
     price_drop_from: float | None = None
     rank: int = 0  # place on the podium, 0 for a plain deal
     change: str = ""  # podium only: "new", "up from #3", ...
+    extra: str = ""  # where it is, shipping, "VB" (Kleinanzeigen)
 
     @property
     def medal(self) -> str:
@@ -32,8 +33,9 @@ class Deal:
         drop = f" (was {self.price_drop_from:g})" if self.price_drop_from else ""
         head = f"{self.medal} " if self.rank else f"[{self.search}] "
         change = f"  ({self.change})" if self.change else ""
+        extra = f"\n  {self.extra}" if self.extra else ""
         return (f"{head}{self.value:.1f} pts/100{self.currency} | {self.price:g} {self.currency}{drop} | {self.title}{change}"
-                f"\n  {self.summary}\n  {self.url}")
+                f"\n  {self.summary}{extra}\n  {self.url}")
 
 
 MEDALS = ["🥇", "🥈", "🥉"]
@@ -97,7 +99,7 @@ class DiscordNotifier(Notifier):
             "description": (f"**{d.price:g} {d.currency}**"
                             + (f" ~~{d.price_drop_from:g}~~" if d.price_drop_from else "")
                             + f" · value {d.value:.1f}" + (f" · {d.change}" if d.change else "")
-                            + f"\n{d.summary}")[:4000],
+                            + f"\n{d.summary}" + (f"\n📍 {d.extra}" if d.extra else ""))[:4000],
             "thumbnail": {"url": d.photo} if d.photo else None,
             "footer": {"text": d.search},
         }
@@ -122,7 +124,7 @@ class NtfyNotifier(Notifier):
 
     def send(self, deals):
         for d in deals:
-            self._push(d.title, f"{d.price:g} {d.currency} · value {d.value:.1f}\n{d.summary}", d.url)
+            self._push(d.title, f"{d.price:g} {d.currency} · value {d.value:.1f}\n{d.summary}" + (f"\n{d.extra}" if d.extra else ""), d.url)
 
     def send_podium(self, podium):
         body = "\n".join(f"{d.medal} {d.price:g} {d.currency} · {d.value:.1f} · {d.title}"

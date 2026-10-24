@@ -6,19 +6,25 @@ import logging
 import random
 import time
 
-from .client import BlockedError, VintedClient
+from .client import BlockedError, ClientSettings, VintedClient
 from .config import Config, SearchConfig
 from .models import Listing
 from .notify import Deal, Podium, build_notifiers
-from .ranking import build_podium, changed, rescore
+from .ranking import build_podium, changed, rescore, score_stored
 from .scoring import Score, build_scorer
 from .storage import Placed, Store
 
 log = logging.getLogger(__name__)
 
 
+def make_client(settings: ClientSettings) -> VintedClient:
+    from .kleinanzeigen import KleinanzeigenClient, is_kleinanzeigen
+
+    return KleinanzeigenClient(settings) if is_kleinanzeigen(settings.domain) else VintedClient(settings)
+
+
 class Runner:
-    def __init__(self, config: Config, client_factory=VintedClient):
+    def __init__(self, config: Config, client_factory=make_client):
         self.config = config
         self.store = Store(config.database)
         self.notifiers = build_notifiers(config.notifiers)
@@ -84,15 +90,17 @@ class Runner:
         log.info("[%s] scoring %d listings (fetching up to %d descriptions)", search.name, len(listings), detail_budget)
         for listing in listings:
             prev = self.store.previous(search.name, listing.id)
-            if prev and prev.description and not listing.description:
-                listing.description = prev.description
+            # A description fetched earlier beats the snippet some sites put in search results.
+            if prev and len(prev.description) > len(listing.description):
+                listing.description, listing.partial_description = prev.description, False
             try:
                 score = scorer.score(listing)
-                if score.needs_details and detail_budget > 0 and not listing.description and score.reject in (None, "cpu unknown"):
+                if (score.needs_details and detail_budget > 0 and score.reject in (None, "cpu unknown")
+                        and (not listing.description or listing.partial_description)):
                     detail_budget -= 1
                     desc = self.client(search.domain).item_description(listing.id)
                     if desc:
-                        listing.description = desc
+                        listing.description, listing.partial_description = desc, False
                         if search.exclude and search.exclude.search(desc):
                             # Still stored, so the description isn't fetched again next run.
                             score = Score(0, listing.effective_price, "excluded by description", reject="excluded")
@@ -115,7 +123,7 @@ class Runner:
         rescored = rescore(self.store, search, rules.podium_hours, skip={lst.id for lst, _ in scored}, scorer=scorer)
         log.debug("[%s] rescored %d stored listings", search.name, rescored)
         if rules.podium > 0:
-            podium = self.update_podium(search, {lst.id for lst, _ in scored})
+            podium = self.update_podium(search, {lst.id for lst, _ in scored}, scorer)
             self.store.commit()
             log.info("[%s] %d listings, podium %s", search.name, len(scored), "changed" if podium else "unchanged")
             return podium
@@ -129,7 +137,7 @@ class Runner:
             if notified is None or (rules.price_drop and listing.price < notified - 0.01):
                 deals.append(
                     Deal(search.name, listing.title, listing.price, listing.currency, score.value,
-                         score.summary, listing.url, listing.photo, price_drop_from=notified)
+                         score.summary, listing.url, listing.photo, price_drop_from=notified, extra=listing.extra)
                 )
                 self.store.mark_notified(search.name, listing.id, listing.price)
             if len(deals) >= rules.top:
@@ -139,7 +147,7 @@ class Runner:
                  f", {len(failures)} could not be scored" if failures else "")
         return deals
 
-    def update_podium(self, search: SearchConfig, seen: set[int]) -> Podium | None:
+    def update_podium(self, search: SearchConfig, seen: set[int], scorer=None) -> Podium | None:
         """Rank the best stored listings and return the podium if it differs from the last one sent."""
         rules = search.notify
         if search.name in self._blocked:
@@ -162,6 +170,7 @@ class Runner:
                     continue  # unknown: keep it ranked
                 if page.available:
                     self.store.mark_seen(search.name, item_id)
+                    self._complete(search, scorer, item_id, page.description)
                 else:
                     log.info("[%s] %s is no longer for sale", search.name, item_id)
                     self.store.mark_gone(search.name, item_id)
@@ -174,6 +183,16 @@ class Runner:
         for r in rows:
             self.store.mark_notified(search.name, r["id"], r["price"])
         return build_podium(search.name, rows, old) if rows else None
+
+    def _complete(self, search: SearchConfig, scorer, item_id: int, description: str) -> None:
+        """The availability check loaded the listing anyway: keep its full description and rescore,
+        so a podium place never rests on a search snippet ("Es ist ein i5 verbaut. Es...")."""
+        listing = self.store.listing(search.name, item_id)
+        if not listing or len(description) <= len(listing.description):
+            return
+        listing.description = description
+        self.store.set_description(search.name, item_id, description)
+        self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
 
     def run_once(self) -> list[Deal]:
         all_deals: list[Deal] = []

@@ -30,6 +30,8 @@ class Listing:
     seller: str = ""
     favourites: int = 0
     description: str = ""
+    partial_description: bool = False  # only the start, as in Kleinanzeigen search results
+    extra: str = ""  # site-specific notes for alerts: "06112 Halle · nur Abholung · VB"
     raw: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -59,5 +61,7 @@ class Listing:
             seller=(item.get("user") or {}).get("login") or "",
             favourites=int(item.get("favourite_count") or 0),
             description=item.get("description") or "",
+            partial_description=bool(item.get("description_partial")),
+            extra=item.get("extra") or "",
             raw=item,
         )
