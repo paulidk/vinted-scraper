@@ -54,7 +54,7 @@ class ComputerScorer:
         self.assume_ram_gb = assume_ram_gb
         self.unknown_cpu_mark = unknown_cpu_mark
         self.require_cpu = require_cpu
-        self.reject = set(reject if reject is not None else ["defect", "lot"])
+        self.reject = set(reject if reject is not None else ["defect", "lot", "cpu_only"])
         self.barebone_factor = barebone_factor
         self.no_psu_penalty = no_psu_penalty
         self.shipping_estimate = shipping_estimate
@@ -75,7 +75,7 @@ class ComputerScorer:
         cost = listing.effective_price + self.shipping_estimate
         summary = specs.summary()
 
-        for flag in ("defect", "lot", "barebone", "no_psu"):
+        for flag in ("defect", "lot", "cpu_only", "barebone", "no_psu"):
             if flag in self.reject and getattr(specs, flag):
                 return Score(0, cost, summary, reject=flag)
         if self.require_cpu and not specs.cpu:

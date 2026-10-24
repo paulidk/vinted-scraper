@@ -95,6 +95,14 @@ def test_paginates(monkeypatch, no_sleep):
     assert len(log) == 3
 
 
+def test_paging_stops_when_until_says_so(monkeypatch, no_sleep):
+    pages = [page([{"id": i}, {"id": i + 100}], total_pages=9) for i in range(3)]
+    c, log, _ = make_client(monkeypatch, pages)
+    items = c.search({}, pages=9, until=lambda batch: batch[0]["id"] == 1)
+    assert [i["id"] for i in items] == [0, 100, 1, 101]
+    assert len(log) == 2
+
+
 def test_parses_catalog_item_into_api_shape():
     item = {
         "id": 7, "title": "Dell OptiPlex 7060", "url": "/items/7-dell", "favouriteCount": 3,

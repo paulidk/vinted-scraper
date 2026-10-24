@@ -15,7 +15,7 @@ class FakeClient:
         self.availability = {}  # item id -> True/False, missing = page doesn't say
         self.page_calls = []
 
-    def search(self, params, pages=1):
+    def search(self, params, pages=1, until=None):
         self.searches.append(params)
         return copy.deepcopy(self.items)
 
@@ -93,7 +93,7 @@ def test_stops_querying_when_blocked(tmp_path):
     runner, fake = make_runner(tmp_path, [])
     calls = []
 
-    def blocked(params, pages=1):
+    def blocked(params, pages=1, until=None):
         calls.append(params)
         raise BlockedError("403")
 
@@ -144,3 +144,24 @@ def test_description_excluded_listing_is_not_fetched_again(tmp_path, catalog_ite
     fake["c"].detail_calls.clear()
     runner.run_once()
     assert fake["c"].detail_calls == []
+
+
+def test_pages_deep_once_then_only_until_known_listings(tmp_path, catalog_items):
+    runner, fake = make_runner(tmp_path, catalog_items, pages=9)
+    stops = []
+    client = runner.client("www.vinted.de")
+    original = client.search
+
+    def search(params, pages=1, until=None):
+        items = original(params, pages)
+        stops.append(None if until is None else until(items))
+        return items
+
+    client.search = search
+    runner.run_once()
+    assert stops == [None, None]  # first run: all 9 pages of both queries
+    runner.run_once()
+    assert stops[2:] == [True, True]  # every listing (even the filtered monitor) is known now
+    runner.config.searches[0].pages = 12
+    runner.run_once()
+    assert stops[4:] == [None, None]  # raised `pages`: one more full pass

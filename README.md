@@ -26,8 +26,9 @@ value  = 100 × points / cost          → "points per 100 €", what everything
   very well. Set `kwh_price` and `years` to match your situation.
 - **RAM/storage** are parsed in German, French, Dutch, Polish, Italian, Spanish and English,
   including `8/256` and `16Go/512Go` styles.
-- **Rejects** broken listings (`defekt`, `for parts`, `pour pièces`, BIOS locked, ...) and bundle
-  lots. You can also reject barebones (no RAM/SSD) and listings without a power supply, or apply a
+- **Rejects** broken listings (`defekt`, `for parts`, `pour pièces`, BIOS locked, ...), bundle
+  lots, and loose processors or boards (`Processore i5-10500T LGA 1200`, a title that is only a CPU
+  model). You can also reject barebones (no RAM/SSD) and listings without a power supply, or apply a
   penalty to them instead.
 - When the title has no CPU or RAM info, it fetches the item description (up to
   `fetch_details` per run) and caches it.
@@ -71,6 +72,9 @@ python -m vinted_scraper -c config.yaml score "OptiPlex 7070 Micro i5-9500T 16GB
   `Accept-Language` that matches the Vinted country site.
 - Visits the homepage first to collect session cookies like a browser would, and renews them on 401.
 - Waits a random 2–6 s between requests, and adds ±4 min of jitter to the 30-minute schedule.
+- Loads each search term `pages` deep (default 5 pages of 96) only once. Results are newest
+  first, so later runs stop paging at listings they have already seen, which usually means a
+  single page per term.
 - On 403/429 or a challenge page it backs off exponentially, then switches to a different
   browser fingerprint (and proxy, if you configured any) with a new session. If it is still
   blocked, it skips the rest of that run instead of piling on more requests.

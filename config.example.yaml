@@ -42,6 +42,8 @@ searches:
     # filters included:  url: "https://www.vinted.de/catalog?search_text=optiplex&price_to=150"
     min_price: 20
     max_price: 250
+    pages: 5                # max result pages (96 listings each) per query. Each query is fetched
+                            # this deep once; later runs stop at listings already seen, usually page 1
     exclude: "\\b(monitor|bildschirm|écran|tastatur|keyboard|clavier|netzteil only|nur netzteil|vesa|halterung|stand)\\b"
     fetch_details: 10       # fetch up to N descriptions per run when the title lacks CPU/RAM
     notify:
@@ -58,7 +60,7 @@ searches:
       min_cpu_mark: 4500    # ~ i5-6500T; raise to e.g. 8000 for 8th gen+ only
       min_ram_gb: 4
       assume_ram_gb: 8      # when the listing doesn't say
-      reject: [defect, lot] # also possible: barebone, no_psu
+      reject: [defect, lot, cpu_only]  # cpu_only = a loose processor/board; also possible: barebone, no_psu
       shipping_estimate: 6
       kwh_price: 0.32       # electricity cost per kWh ...
       years: 2              # ... over this many years of 24/7 use is added to the price

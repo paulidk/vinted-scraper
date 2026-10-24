@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 import logging
 import random
 import time
@@ -35,9 +36,20 @@ class Runner:
         client = self.client(search.domain)
         seen: dict[int, Listing] = {}
         self._blocked.discard(search.name)
+
+        def mostly_known(batch: list[dict]) -> bool:
+            # Results are newest first: once a page is mostly listings from earlier runs, the
+            # pages after it hold nothing new.
+            ids = [int(raw["id"]) for raw in batch if str(raw.get("id") or "").isdigit()]
+            return self.store.known(search.name, ids) >= len(ids) / 2
+
         for params in search.queries:
+            key = json.dumps(params, sort_keys=True)
+            # Each query is fetched `pages` deep once (also after `pages` was raised); after that
+            # only until the listings from earlier runs start, usually a single page.
+            full = self.store.crawled_pages(search.name, key) < search.pages
             try:
-                raw_items = client.search(params, pages=search.pages)
+                raw_items = client.search(params, pages=search.pages, until=None if full else mostly_known)
             except BlockedError as exc:
                 # Retries are exhausted: hammering on with the remaining queries only digs
                 # the hole deeper. Keep what we have and try again next run.
@@ -45,6 +57,8 @@ class Runner:
                           search.name, params.get("search_text") or params, exc)
                 self._blocked.add(search.name)
                 break
+            if full:
+                self.store.set_crawled_pages(search.name, key, search.pages)
             log.info("[%s] %s: %d items", search.name, params.get("search_text") or "(no text)", len(raw_items))
             for raw in raw_items:
                 try:
@@ -57,7 +71,13 @@ class Runner:
     def run_search(self, search: SearchConfig) -> list[Deal] | Podium | None:
         """Returns new deals, or in podium mode the new podium (None if it didn't change)."""
         scorer = build_scorer(search.scorer)
-        listings = [item for item in self.fetch(search) if search.keeps(item)]
+        listings = []
+        for item in self.fetch(search):
+            if search.keeps(item):
+                listings.append(item)
+            else:
+                # Stored too, so paging knows it has seen it and a looser filter later picks it up.
+                self.store.upsert(search.name, item, Score(0, item.effective_price, "excluded by filters", reject="excluded"))
         scored: list[tuple[Listing, Score]] = []
         detail_budget = search.fetch_details
         failures: list[Exception] = []

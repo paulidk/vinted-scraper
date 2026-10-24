@@ -31,6 +31,12 @@ CREATE TABLE IF NOT EXISTS items (
     PRIMARY KEY (search, id)
 );
 CREATE INDEX IF NOT EXISTS items_value ON items (search, value DESC);
+CREATE TABLE IF NOT EXISTS crawled (
+    search TEXT NOT NULL,
+    query TEXT NOT NULL,  -- the query's params as JSON
+    pages INTEGER NOT NULL,  -- how deep it was fetched in full once
+    PRIMARY KEY (search, query)
+);
 CREATE TABLE IF NOT EXISTS podium (
     search TEXT PRIMARY KEY,
     ranking TEXT NOT NULL,  -- JSON list of {"id", "price", "title"}, best first
@@ -101,7 +107,8 @@ class Store:
                  brand=excluded.brand, condition=excluded.condition, gone=NULL""",
             (search, listing.id, listing.title, listing.price, listing.currency, score.cost, score.points,
              score.value, score.summary, listing.url, listing.photo, listing.description, score.reject, now, now,
-             listing.total_price, listing.brand, listing.condition),
+             # Never NULL for new rows: NULL marks rows stored before the column existed.
+             listing.total_price or listing.price, listing.brand, listing.condition),
         )
 
     def rows(self, search: str, max_age_hours: float | None = None) -> list[sqlite3.Row]:
@@ -121,6 +128,20 @@ class Store:
             "UPDATE items SET cost=?, points=?, value=?, summary=?, reject=? WHERE search=? AND id=?",
             (score.cost, score.points, score.value, score.summary, score.reject, search, item_id),
         )
+
+    def known(self, search: str, ids: list[int]) -> int:
+        """How many of these listings were stored before."""
+        marks = ",".join("?" * len(ids))
+        return self.db.execute(f"SELECT COUNT(*) FROM items WHERE search=? AND id IN ({marks})",
+                               (search, *ids)).fetchone()[0] if ids else 0
+
+    def crawled_pages(self, search: str, query: str) -> int:
+        row = self.db.execute("SELECT pages FROM crawled WHERE search=? AND query=?", (search, query)).fetchone()
+        return row["pages"] if row else 0
+
+    def set_crawled_pages(self, search: str, query: str, pages: int) -> None:
+        self.db.execute("INSERT INTO crawled (search, query, pages) VALUES (?,?,?) "
+                        "ON CONFLICT (search, query) DO UPDATE SET pages=excluded.pages", (search, query, pages))
 
     def mark_gone(self, search: str, item_id: int) -> None:
         self.db.execute("UPDATE items SET gone=? WHERE search=? AND id=?", (time.time(), search, item_id))

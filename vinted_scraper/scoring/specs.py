@@ -48,6 +48,18 @@ NO_PSU = re.compile(
     r"without\s*(?:psu|power\s*(?:supply|adapter)|charger)|bez\s*zasilacza|senza\s*alimentatore|sin\s*cargador)\b"
 )
 LOT = re.compile(r"\b(lot\s*(?:de|of)?\s*\d|[2-9]\d*\s*(?:x\s*)?(?:pcs|pieces|pièces|stück|stk|szt))\b")
+# A loose processor rather than a computer: a socket, an Intel sSpec code or "Prozessor" in the title...
+CPU_PART = re.compile(
+    r"\b(fc)?lga\s*-?\d{3,4}\b|\bam[345]\b|\b(sockel|socket|tray|boxed)\b|\bsr[0-9a-z]{3}\b|\b\d+c\s*/\s*\d+t\b|"
+    r"^\s*(cpu|processor|prozessor|processeur|processore|procesor|procesador|processador)\b"
+)
+# ...unless the title also names a whole machine or its RAM/storage.
+MACHINE = re.compile(
+    r"\b(pc|computer|rechner|ordinateur|ordenador|komputer|desktop|tower|sff|micro|tiny|mini|nuc\w*|laptop|notebook|"
+    r"thin\s*client|server|workstation|dell|lenovo|hp|fujitsu|asus|acer|msi|intel\s*nuc|optiplex|thinkcentre|"
+    r"thinkpad|elitedesk|prodesk|elitebook|esprimo|futro|vostro|veriton|beelink|minisforum|gmktec|chromebox|"
+    r"m\d{2,3}[qsa]|\d+\s*(?:gb|go|tb|to))\b"
+)
 WIFI = re.compile(r"\b(wi-?fi|wlan|802\.11)\b")
 
 
@@ -62,6 +74,7 @@ class Specs:
     barebone: bool = False
     no_psu: bool = False
     lot: bool = False
+    cpu_only: bool = False
     wifi: bool = False
 
     def summary(self) -> str:
@@ -75,7 +88,7 @@ class Specs:
             parts.append(f"{size} {'SSD' if self.ssd else 'disk'}")
         if self.form_factor:
             parts.append(self.form_factor)
-        parts += [flag for flag in ("defect", "barebone", "no_psu", "lot") if getattr(self, flag)]
+        parts += [flag for flag in ("defect", "barebone", "no_psu", "lot", "cpu_only") if getattr(self, flag)]
         return ", ".join(parts) or "no specs found"
 
 
@@ -194,5 +207,8 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -
     specs.barebone = bool(BAREBONE.search(t))
     specs.no_psu = bool(NO_PSU.search(t))
     specs.lot = bool(LOT.search(t))
+    head = (title or text.split("\n", 1)[0]).lower()
+    # A title that is just a CPU model ("Intel Core i5 7500") is a processor for sale too.
+    specs.cpu_only = not MACHINE.search(head) and bool(CPU_PART.search(head) or lookup(head, cpu_overrides))
     specs.wifi = bool(WIFI.search(t))
     return specs

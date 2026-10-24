@@ -96,6 +96,24 @@ def test_flags():
     assert parse_specs("OptiPlex Micro defekt").defect
     assert parse_specs("ThinkCentre ohne RAM und ohne SSD").barebone
     assert parse_specs("Mini PC sans alimentation").no_psu
+
+
+@pytest.mark.parametrize("title, cpu_only", [
+    ("AMD Ryzen 3 PRO 5350GE (4c/8t - 35w - am4)", True),
+    ("Intel Core i3-10100T 3.00GHz LGA 1200 - Basso consumo 35W (SRH3Q)", True),
+    ("Processore Intel Core i5-14500T (LGA 1700)", True),
+    ("CPU intel i5-6500T", True),
+    ("Intel Core i5 7500", True),
+    ("Kit carte mere + i5 6500", True),
+    ("NUC7i5BNK i5-7260U", False),
+    ("Lenovo M720q i5-8500T", False),
+    ("i5-8500T 16GB 256GB SSD", False),
+    ("Mini pc idéal retrogaming i7 11 ème gen", False),
+    ("Dell OptiPlex 7040 + Lecteur DVD", False),
+    ("PC Intel i5-6500 Windows 11", False),
+])
+def test_loose_cpu(title, cpu_only):
+    assert parse_specs(title, title=title).cpu_only is cpu_only
     assert parse_specs("Lot de 3 Optiplex").lot
     assert not parse_specs("Optiplex 2x 8GB RAM").lot
 

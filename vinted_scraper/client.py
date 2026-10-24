@@ -31,7 +31,7 @@ import random
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qsl, urlparse
 
 from curl_cffi import requests
@@ -310,10 +310,12 @@ class VintedClient:
         resp = self._get(path, params, _HTML_ACCEPT, referer or self.base_url + "/", json_body=False)
         return resp.text if resp is not None else ""
 
-    def search(self, params: dict[str, Any], pages: int = 1, per_page: int = 96) -> list[dict]:
+    def search(self, params: dict[str, Any], pages: int = 1, per_page: int = 96,
+               until: Callable[[list[dict]], bool] | None = None) -> list[dict]:
         """Return catalog items for a search, newest first by default.
 
         The catalog page always renders 96 items; `per_page` only trims the result.
+        Stops before `pages` once `until(page_items)` is true.
         """
         items: list[dict] = []
         query = {"order": "newest_first", **params}
@@ -327,7 +329,7 @@ class VintedClient:
             batch = data["items"]
             items.extend(batch)
             total_pages = data["pagination"].get("total_pages") or page
-            if not batch or page >= total_pages:
+            if not batch or page >= total_pages or (until and until(batch)):
                 break
         return items[: per_page * pages]
 

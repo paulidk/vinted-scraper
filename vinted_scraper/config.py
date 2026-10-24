@@ -38,7 +38,7 @@ class SearchConfig:
     name: str
     domain: str
     queries: list[dict]  # API params, one dict per query
-    pages: int = 1
+    pages: int = 5  # max result pages per query; paging stops early at listings seen before
     min_price: float | None = None
     max_price: float | None = None
     include: re.Pattern | None = None
@@ -95,7 +95,7 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
         name=raw["name"],
         domain=domain,
         queries=queries,
-        pages=raw.get("pages", 1),
+        pages=raw.get("pages", 5),
         min_price=raw.get("min_price"),
         max_price=raw.get("max_price"),
         include=re.compile(raw["include"], re.I) if raw.get("include") else None,

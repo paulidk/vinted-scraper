@@ -106,7 +106,7 @@ def test_blocked_run_keeps_the_last_podium(tmp_path, catalog_items):
     runner.run_once()
     runner2, fake2, rec2 = podium_runner(tmp_path, [])
 
-    def blocked(params, pages=1):
+    def blocked(params, pages=1, until=None):
         raise BlockedError("403")
 
     runner2.client("www.vinted.de").search = blocked
@@ -120,7 +120,8 @@ def test_rescore_applies_config_changes_to_stored_listings(tmp_path, catalog_ite
     runner.run_once()
     search = runner.config.searches[0]
     store = runner.store
-    assert [r["id"] for r in store.top("pcs")] == [101, 102, 105]
+    fresh = {r["id"]: r["value"] for r in store.top("pcs")}
+    assert list(fresh) == [101, 102, 105]
 
     search.exclude = re.compile("thinkcentre", re.I)
     search.scorer = {"type": "computer", "require_cpu": True}
@@ -132,7 +133,8 @@ def test_rescore_applies_config_changes_to_stored_listings(tmp_path, catalog_ite
     search.exclude = None
     search.scorer = {"type": "computer"}
     rescore(store, search)
-    assert [r["id"] for r in store.top("pcs")] == [101, 102, 105]
+    assert [r["id"] for r in store.top("pcs")] == [101, 102, 105, 104]  # the filtered monitor is back
+    assert {r["id"]: r["value"] for r in store.top("pcs") if r["id"] != 104} == fresh  # same as freshly scraped
 
 
 def test_old_database_gets_new_columns(tmp_path):

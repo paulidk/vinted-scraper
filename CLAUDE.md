@@ -98,6 +98,10 @@ Known limitation: when several sizes each sit next to a RAM keyword, the largest
 "8GB RAM, upgradable to 32GB RAM" counts as 32 GB. Fixing it means recognising "upgradable",
 "max", "bis zu", ... near a size.
 
+`cpu_only` flags loose processors/boards (socket, sSpec code or "Prozessor" in the title, or a title
+that is only a CPU model) unless the title names a machine, brand or RAM/storage size. They showed
+up once paging went deeper and topped the ranking because RAM is assumed. Cases: `test_loose_cpu`.
+
 When you change the parser, add the listing text as a case to `test_ram_and_storage` in
 `tests/test_specs.py`. That table is the regression suite. CPU scores in `cpu_db.py` are
 deliberately rough (rankings, not benchmarks). Users correct them with `cpu_overrides`.
@@ -109,6 +113,10 @@ deliberately rough (rankings, not benchmarks). Users correct them with `cpu_over
   `run_once` logs "search crashed" with the real error.
 - A listing whose fetched description matches `exclude` is stored with `reject="excluded"`
   for the same reason.
+- **Paging:** the catalog renders 96 items per page. Each query is fetched `pages` deep (default
+  5) once, recorded in the `crawled` table; after that `client.search(until=...)` stops at the
+  first page that is mostly listings already stored. Listings dropped by the search filters are
+  stored too (`reject="excluded"`), so they count as known and a looser filter later picks them up.
 - Notifications: an item is notified once, and again only when its price drops below the
   last notified price. `notify.top` caps alerts per search per run.
 - **Rescoring:** every run (and `top`, `podium` and the web UI Deals tab) scores the stored listings

@@ -176,7 +176,7 @@ async function api(path, body) {
 
 // --------------------------------------------------------------- scorers
 const SCORER_DEFAULTS = {
-  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
+  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
   rules: () => ({ type: "rules", base: 10, rules: [] }),
   price: () => ({ type: "price" }),
 };
@@ -201,7 +201,7 @@ function computerScorer(sc) {
       field(sc, "assume_ram_gb", "Assume RAM if not stated", { type: "number", placeholder: "8" }),
       field(sc, "unknown_cpu_mark", "Assumed CPU score if unknown", { type: "number", placeholder: "3000" })),
     h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
-      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
+      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("cpu_only", "just a CPU or board"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
       check(sc, "require_cpu", "missing a CPU model", false)),
     h("h3", {}, "Running costs"),
     h("div", { class: "grid" },
@@ -306,7 +306,7 @@ function searchCard(s, i, open) {
     h("div", { class: "grid" },
       field(s, "min_price", "Min price", { type: "number" }),
       field(s, "max_price", "Max price", { type: "number" }),
-      field(s, "pages", "Result pages per term", { type: "number", placeholder: "1", hint: "96 listings per page" }),
+      field(s, "pages", "Max result pages per term", { type: "number", placeholder: "5", hint: "96 per page; fetched in full once, then only until known listings" }),
       field(s, "fetch_details", "Descriptions to fetch per run", { type: "number", placeholder: "0", hint: "for listings with vague titles" }),
       field(s, "include", "Title must match (regex)", { placeholder: "optiplex|thinkcentre" }),
       field(s, "exclude", "Skip if matches (regex)", { placeholder: "\\b(monitor|keyboard)\\b" })),
