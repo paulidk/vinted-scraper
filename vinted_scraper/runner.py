@@ -39,9 +39,9 @@ class Runner:
                 # Retries are exhausted: hammering on with the remaining queries only digs
                 # the hole deeper. Keep what we have and try again next run.
                 log.error("[%s] blocked on %s, skipping the rest of this run: %s",
-                          search.name, params.get("search_text", params), exc)
+                          search.name, params.get("search_text") or params, exc)
                 break
-            log.info("[%s] %s: %d items", search.name, params.get("search_text", "(no text)"), len(raw_items))
+            log.info("[%s] %s: %d items", search.name, params.get("search_text") or "(no text)", len(raw_items))
             for raw in raw_items:
                 try:
                     listing = Listing.from_api(raw)
@@ -66,6 +66,7 @@ class Runner:
         listings = [item for item in self.fetch(search) if self._keep(search, item)]
         scored: list[tuple[Listing, Score]] = []
         detail_budget = search.fetch_details
+        failures: list[Exception] = []
         log.info("[%s] scoring %d listings (fetching up to %d descriptions)", search.name, len(listings), detail_budget)
         for listing in listings:
             prev = self.store.previous(search.name, listing.id)
@@ -79,14 +80,22 @@ class Runner:
                     if desc:
                         listing.description = desc
                         if search.exclude and search.exclude.search(desc):
-                            continue
-                        score = scorer.score(listing)
-            except Exception:
-                # One odd listing must not take down the whole search.
+                            # Still stored, so the description isn't fetched again next run.
+                            score = Score(0, listing.effective_price, "excluded by description", reject="excluded")
+                        else:
+                            score = scorer.score(listing)
+            except Exception as exc:
+                # One odd listing must not take down the whole search. It is stored as rejected
+                # so a description fetched above stays cached; the next run scores it again.
                 log.exception("[%s] could not score %s (%s)", search.name, listing.id, listing.title)
-                continue
+                failures.append(exc)
+                score = Score(0, listing.effective_price, "scoring failed", reject="scoring error")
             self.store.upsert(search.name, listing, score)
             scored.append((listing, score))
+        if failures and len(failures) == len(listings):
+            # Every listing failed: that's a scorer bug, not odd listings. Let run_once report it.
+            self.store.commit()
+            raise RuntimeError(f"scoring failed for all {len(failures)} listings") from failures[-1]
 
         deals: list[Deal] = []
         rules = search.notify
@@ -104,7 +113,8 @@ class Runner:
             if len(deals) >= rules.top:
                 break
         self.store.commit()
-        log.info("[%s] %d listings, %d new deals", search.name, len(scored), len(deals))
+        log.info("[%s] %d listings, %d new deals%s", search.name, len(scored), len(deals),
+                 f", {len(failures)} could not be scored" if failures else "")
         return deals
 
     def run_once(self) -> list[Deal]:

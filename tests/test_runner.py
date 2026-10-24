@@ -94,3 +94,47 @@ def test_stops_querying_when_blocked(tmp_path):
     runner.client("www.vinted.de").search = blocked
     assert runner.run_once() == []
     assert len(calls) == 1
+
+
+def test_scorer_bug_hitting_every_listing_is_reported_as_crash(tmp_path, catalog_items, monkeypatch, caplog):
+    class Broken:
+        def score(self, listing):
+            raise ZeroDivisionError("bug")
+
+    monkeypatch.setattr("vinted_scraper.runner.build_scorer", lambda cfg: Broken())
+    runner, _ = make_runner(tmp_path, catalog_items)
+    assert runner.run_once() == []
+    assert "search crashed" in caplog.text
+    assert "scoring failed for all" in caplog.text
+
+
+def test_failed_rescore_keeps_fetched_description(tmp_path, catalog_items, monkeypatch):
+    from vinted_scraper.scoring import build_scorer
+
+    real = build_scorer({"type": "computer"})
+
+    class FailsWithDescription:
+        def score(self, listing):
+            if listing.description:
+                raise ValueError("bug in description parsing")
+            return real.score(listing)
+
+    monkeypatch.setattr("vinted_scraper.runner.build_scorer", lambda cfg: FailsWithDescription())
+    runner, fake = make_runner(tmp_path, catalog_items, descriptions={105: "i7-8700T 32GB RAM"}, fetch_details=5)
+    deals = runner.run_once()
+    assert fake["c"].detail_calls == [105]
+    assert "105" not in [d.url.rsplit("/", 1)[1] for d in deals]
+    assert runner.store.previous("pcs", 105).description == "i7-8700T 32GB RAM"
+    fake["c"].detail_calls.clear()
+    runner.run_once()
+    assert fake["c"].detail_calls == []
+
+
+def test_description_excluded_listing_is_not_fetched_again(tmp_path, catalog_items):
+    runner, fake = make_runner(tmp_path, catalog_items, descriptions={105: "comes with a monitor"}, fetch_details=5)
+    deals = runner.run_once()
+    assert "105" not in [d.url.rsplit("/", 1)[1] for d in deals]
+    assert fake["c"].detail_calls == [105]
+    fake["c"].detail_calls.clear()
+    runner.run_once()
+    assert fake["c"].detail_calls == []

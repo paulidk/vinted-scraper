@@ -8,3 +8,4 @@ config.yaml
 .pytest_cache/
 .env
 .ruff_cache/
+config.yaml.bak

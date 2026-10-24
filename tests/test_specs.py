@@ -54,6 +54,21 @@ def test_cpu_overrides():
         ("M720q 512 Go SSD + 8 Go", 8, 512),
         ("Tour PC HP - 8go de RAM - 128go de SSD - 500go de HDD", 8, 500),
         ("Dell OptiPlex SFF i3 4th ssd 128Gb ddr3 16Go Win 11 pro", 16, 128),
+        # a RAM keyword wins over later "upgrade" pairs
+        ("Optiplex i5 8GB RAM upgradable 16GB/64GB", 8, None),
+        ("Mini PC 8GB RAM, max 8GB/32GB", 8, None),
+        # same value for RAM and storage
+        ("Wyse 32GB RAM 32GB eMMC", 32, 32),
+        # keyword before size, or mixed orders
+        ("RAM 16GB SSD 256GB", 16, 256),
+        ("SSD 512GB, 16GB RAM", 16, 512),
+        ("16GB RAM, 8GB/256GB", 16, 256),
+        ("Mini 8/256GB SSD", 8, 256),
+        ("ThinkCentre 8GB RAM 256GB", 8, 256),
+        ("NUC 8GB (2x4GB) DDR4", 8, None),
+        ("Optiplex 2x8GB DDR4 256GB SSD", 16, 256),
+        ("i3 / 4 Go RAM", 4, None),
+        ("EliteDesk 8/1", 8, 1000),
     ],
 )
 def test_ram_and_storage(text, ram, storage):
