@@ -40,8 +40,8 @@ class NotifyRules:
 @dataclass
 class SearchConfig:
     name: str
-    domain: str
-    queries: list[dict]  # API params, one dict per query
+    domain: str  # default site for queries without their own "domain"
+    queries: list[dict]  # params, one dict per query; "domain" picks the site (Vinted country or Kleinanzeigen)
     pages: int = 5  # max result pages per query; paging stops early at listings seen before
     min_price: float | None = None
     max_price: float | None = None
@@ -74,25 +74,42 @@ class Config:
 
 
 def _search(raw: dict, default_domain: str) -> SearchConfig:
-    site = raw.get("site", "vinted")
-    if site not in SITES:
-        raise ValueError(f"search {raw.get('name')!r}: unknown site {site!r}; choose from {sorted(SITES)}")
-    domain = raw.get("domain") or (KLEINANZEIGEN if site == "kleinanzeigen" else default_domain)
-    base = {k: v for k, v in (raw.get("params") or {}).items()}
+    """Search terms run on every site in `sites`, so one search ranks Vinted and Kleinanzeigen together.
+
+    `params` are Vinted's (`catalog_ids`, `order`, ...) and `kleinanzeigen` holds Kleinanzeigen's
+    (`category`, `shipping`, `seller`, ...). A search on Kleinanzeigen alone may put them in `params`.
+    """
+    urls = [raw["url"]] if "url" in raw else raw.get("urls", [])
+    url_sites = {"kleinanzeigen" if is_kleinanzeigen(u) else "vinted" for u in urls}
+    if "sites" in raw or "site" in raw:
+        sites = list(raw.get("sites") or [raw["site"]])
+    else:
+        sites = sorted(url_sites) or ["vinted"]
+    for site in sites:
+        if site not in SITES:
+            raise ValueError(f"search {raw.get('name')!r}: unknown site {site!r}; choose from {sorted(SITES)}")
+    vinted_domain = raw.get("domain") or default_domain
+    only_ka = sites == ["kleinanzeigen"]
+    bases = {
+        "vinted": ({} if only_ka else dict(raw.get("params") or {}), vinted_domain),
+        "kleinanzeigen": (dict(raw.get("kleinanzeigen") or (raw.get("params") if only_ka else None) or {}), KLEINANZEIGEN),
+    }
     queries: list[dict] = []
-    for url in [raw["url"]] if "url" in raw else raw.get("urls", []):
+    for url in urls:
         if is_kleinanzeigen(url):
             # Kleinanzeigen keeps its filters in the path: keep it whole and only add the page.
-            domain = urlparse(url).netloc or KLEINANZEIGEN
-            queries.append({**base, "path": urlparse(url).path})
+            base, _ = bases["kleinanzeigen"]
+            queries.append({**base, "path": urlparse(url).path, "domain": urlparse(url).netloc or KLEINANZEIGEN})
             continue
         url_domain, params = params_from_url(url)
-        domain = url_domain or domain
-        queries.append({**base, **params})
+        queries.append({**bases["vinted"][0], **params, "domain": url_domain or vinted_domain})
     texts = raw.get("queries") or ([raw["query"]] if "query" in raw else [])
-    queries += [{**base, "search_text": text} for text in texts]
-    if not queries:
-        queries = [base]
+    for site in sites:  # in this order: Vinted first, then Kleinanzeigen
+        base, domain = bases[site]
+        if texts:
+            queries += [{**base, "search_text": text, "domain": domain} for text in texts]
+        elif site not in url_sites:
+            queries.append({**base, "domain": domain})  # no terms: the whole (category) feed
     if raw.get("max_price") is not None:
         for q in queries:
             q.setdefault("price_to", raw["max_price"])
@@ -105,7 +122,7 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
                 q[k] = ",".join(map(str, v))
     return SearchConfig(
         name=raw["name"],
-        domain=domain,
+        domain=queries[0]["domain"] if queries else bases[sites[0]][1],
         queries=queries,
         pages=raw.get("pages", 5),
         min_price=raw.get("min_price"),

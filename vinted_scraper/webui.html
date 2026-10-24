@@ -162,10 +162,19 @@ function normalize(c) {
   for (const s of c.searches) {
     if (s.query !== undefined) { s.queries = [s.query, ...(s.queries || [])]; delete s.query; }
     if (s.url !== undefined) { s.urls = [s.url, ...(s.urls || [])]; delete s.url; }
+    if (s.site !== undefined) { s.sites = [s.site]; delete s.site; }
+    // a Kleinanzeigen-only search may keep its filters in params; the form always uses `kleinanzeigen`
+    if (String(s.sites) === "kleinanzeigen" && s.params && !s.kleinanzeigen) { s.kleinanzeigen = s.params; delete s.params; }
     s.scorer = s.scorer || { type: "rules" };
   }
   c.notifiers = c.notifiers || [];
   return c;
+}
+const SITE_NAMES = { vinted: "Vinted", kleinanzeigen: "Kleinanzeigen" };
+function sitesOf(s) {
+  if (s.sites?.length) return s.sites;
+  const urls = s.urls || [];
+  return urls.length && urls.every((u) => u.includes("kleinanzeigen.")) ? ["kleinanzeigen"] : ["vinted"];
 }
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -181,21 +190,20 @@ const SCORER_DEFAULTS = {
   price: () => ({ type: "price" }),
 };
 const TEMPLATES = {
-  "Mini PC": () => ({ name: "mini-pc", queries: ["optiplex micro", "thinkcentre tiny", "elitedesk mini", "mini pc"], min_price: 20, max_price: 250,
+  "Mini PC": () => ({ name: "mini-pc", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { category: 228, shipping: true },
+    queries: ["optiplex micro", "thinkcentre tiny", "thinkcentre m720q", "thinkcentre m920q", "elitedesk mini", "prodesk mini", "intel nuc", "mini pc"], min_price: 20, max_price: 250,
     exclude: "\\b(monitor|bildschirm|écran|tastatur|keyboard|clavier|vesa|halterung)\\b", fetch_details: 10,
     notify: { min_value: 8, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.computer() }),
-  "Desktop PCs (whole category)": () => ({ name: "desktops", urls: ["https://www.vinted.de/catalog?catalog[]=3581"], min_price: 30, max_price: 500,
+  "Desktop PCs (whole category)": () => ({ name: "desktops", sites: ["vinted", "kleinanzeigen"], urls: ["https://www.vinted.de/catalog?catalog[]=3581"],
+    kleinanzeigen: { category: 228, shipping: true }, min_price: 30, max_price: 500,
     fetch_details: 10, notify: { min_value: 5, podium: 3, price_drop: true },
     scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 12, weights: { gpu: 0.5 },
-      form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1 } } }),
-  "Kleinanzeigen PCs (whole category)": () => ({ name: "kleinanzeigen-pcs", site: "kleinanzeigen", params: { category: 228, shipping: true },
-    min_price: 30, max_price: 500, fetch_details: 10, notify: { min_value: 5, podium: 3, price_drop: true },
-    scorer: { ...SCORER_DEFAULTS.computer(), reject: ["defect", "lot", "cpu_only"], min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 8,
-      weights: { gpu: 0.5 }, form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1 } } }),
-  "Servers": () => ({ name: "servers", queries: ["poweredge", "proliant", "supermicro", "xeon", "primergy", "thinksystem", "rack server", "epyc"],
-    params: { order: "relevance" }, include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|celsius|thinkstation)\\b", pages: 2, min_price: 30, max_price: 800, fetch_details: 10, notify: { min_value: 3, podium: 3, price_drop: true },
+      form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0 } } }),
+  "Servers & workstations": () => ({ name: "servers", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true },
+    queries: ["poweredge", "proliant", "supermicro", "xeon", "epyc", "primergy", "thinksystem", "rack server", "workstation", "dell precision", "hp z440", "thinkstation"],
+    params: { order: "relevance" }, include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|z[2-8]\\s*g[1-5]|celsius|thinkstation)\\b", pages: 2, min_price: 30, max_price: 800, fetch_details: 10, notify: { min_value: 3, podium: 3, price_drop: true },
     scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 5000, require_cpu: true, assume_ram_gb: 16, shipping_estimate: 20,
-      weights: { ram: 0.2, ram_cap: 256, storage: 0.003, storage_cap: 8000 }, form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1 } } }),
+      weights: { ram: 0.2, ram_cap: 256, storage: 0.003, storage_cap: 8000 }, form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0 } } }),
   "Any item (rules)": () => ({ name: "", queries: [], notify: { min_value: 0, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.rules() }),
   "Cheapest first": () => ({ name: "", queries: [], notify: { top: 3, price_drop: true }, scorer: SCORER_DEFAULTS.price() }),
 };
@@ -294,11 +302,18 @@ function scoreTester(s) {
 
 // ---------------------------------------------------------------- tabs
 function searchCard(s, i, open) {
-  const ka = s.site === "kleinanzeigen";
+  const sites = sitesOf(s), vinted = sites.includes("vinted"), ka = sites.includes("kleinanzeigen");
   const scorerBox = h("div");
   const summaryName = h("span", {}, s.name || "(unnamed)");
   const tag = h("span", { class: "tag" }, s.scorer.type || "rules");
-  const siteTag = ka ? h("span", { class: "tag" }, "Kleinanzeigen") : null;
+  const siteTag = h("span", { class: "tag" }, sites.map((x) => SITE_NAMES[x]).join(" + "));
+  const siteBox = (site) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: sites.includes(site), onchange: (e) => {
+    const next = new Set(sitesOf(s));
+    e.target.checked ? next.add(site) : next.delete(site);
+    if (!next.size) { e.target.checked = true; return; }  // at least one site
+    s.sites = Object.keys(SITE_NAMES).filter((x) => next.has(x));
+    touch(); render(i);
+  } }), SITE_NAMES[site]);
   const drawScorer = () => {
     const type = s.scorer.type || "rules";
     tag.textContent = type;
@@ -317,27 +332,26 @@ function searchCard(s, i, open) {
     h("h3", {}, "What to search"),
     h("div", { class: "grid wide" },
       field(s, "name", "Name (unique)", { placeholder: "mini-pc", onchange: () => (summaryName.textContent = s.name || "(unnamed)") }),
-      field(s, "site", "Site", { type: "select", default: "vinted", options: [["vinted", "Vinted"], ["kleinanzeigen", "Kleinanzeigen"]],
-        onchange: () => render(i) }),
-      ka ? null : field(s, "domain", "Vinted country site", { list: "domains", placeholder: cfg.client?.domain || "www.vinted.de", hint: "Leave empty to use the default from General" }),
+      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen")),
+      vinted ? field(s, "domain", "Vinted country site", { list: "domains", placeholder: cfg.client?.domain || "www.vinted.de", hint: "Leave empty to use the default from General" }) : null,
       field(s, "queries", "Search terms (one per line)", { type: "lines", placeholder: "optiplex micro\nthinkcentre tiny", full: true,
-        hint: ka ? "Leave empty to take the whole category" : "" }),
+        hint: (vinted && ka ? "Each term runs on Vinted, then on Kleinanzeigen; all results are ranked together. " : "")
+          + (ka ? "Leave empty to take the whole Kleinanzeigen category." : "") }),
       field(s, "urls", "…or search URLs copied from your browser, filters included (one per line)", { type: "lines", rows: 2, full: true,
-        placeholder: ka ? "https://www.kleinanzeigen.de/s-pcs/halle/optiplex/k0c228l2409r50" : "https://www.vinted.de/catalog?search_text=optiplex&price_to=150",
-        hint: ka ? "Paste one to search around your town: Kleinanzeigen puts the location in the URL" : "" })),
+        placeholder: ka && !vinted ? "https://www.kleinanzeigen.de/s-pcs/halle/optiplex/k0c228l2409r50" : "https://www.vinted.de/catalog?search_text=optiplex&price_to=150",
+        hint: ka ? "Vinted or Kleinanzeigen URLs. Kleinanzeigen puts your town and radius in the URL" : "" })),
     h("h3", {}, "Filters"),
     h("div", { class: "grid" },
       field(s, "min_price", "Min price", { type: "number" }),
       field(s, "max_price", "Max price", { type: "number" }),
+      vinted ? field(obj(s, "params"), "order", "Vinted: sort results by", { type: "select", default: "newest_first",
+        options: [["newest_first", "Newest first"], ["relevance", "Relevance (for rare terms like poweredge)"]] }) : null,
       ...(ka ? [
-        field(obj(s, "params"), "category", "Category ID", { type: "number", placeholder: "228", hint: "228 PCs, 225 PC accessories, 278 notebooks, 161 electronics" }),
-        field(obj(s, "params"), "seller", "Sellers", { type: "select", default: "", options: [["", "All"], ["privat", "Private only"], ["gewerblich", "Commercial only"]] }),
-        h("div", { class: "row" }, check(obj(s, "params"), "shipping", "Only with shipping (Versand möglich)", false)),
-      ] : [
-        field(obj(s, "params"), "order", "Sort results by", { type: "select", default: "newest_first",
-          options: [["newest_first", "Newest first"], ["relevance", "Relevance (for rare terms like poweredge)"]] }),
-      ]),
-      field(s, "pages", "Max result pages per term", { type: "number", placeholder: "5", hint: `${ka ? 25 : 96} per page; fetched in full once, then only until known listings` }),
+        field(obj(s, "kleinanzeigen"), "category", "Kleinanzeigen: category ID", { type: "number", placeholder: "all", hint: "228 PCs, 225 PC accessories, 278 notebooks, 161 electronics" }),
+        field(obj(s, "kleinanzeigen"), "seller", "Kleinanzeigen: sellers", { type: "select", default: "", options: [["", "All"], ["privat", "Private only"], ["gewerblich", "Commercial only"]] }),
+        h("div", { class: "row" }, check(obj(s, "kleinanzeigen"), "shipping", "Kleinanzeigen: only with shipping", false)),
+      ] : []),
+      field(s, "pages", "Max result pages per term", { type: "number", placeholder: "5", hint: "96 per page on Vinted, 25 on Kleinanzeigen; fetched in full once, then only until known listings" }),
       field(s, "fetch_details", "Descriptions to fetch per run", { type: "number", placeholder: "0", hint: "for listings with vague titles" }),
       field(s, "include", "Title must match (regex)", { placeholder: "optiplex|thinkcentre" }),
       field(s, "exclude", "Skip if matches (regex)", { placeholder: "\\b(monitor|keyboard)\\b" })),

@@ -29,15 +29,25 @@ notifiers:
 searches:
   # ---------------------------------------------------------------- mini PCs
   - name: mini-pc
+    # Every search term runs on each site listed here, Vinted first, and all results are ranked
+    # together (one top 3). `params` are Vinted's filters, `kleinanzeigen` Kleinanzeigen's.
+    # sites: [vinted, kleinanzeigen]
+    # kleinanzeigen: {category: 228, shipping: true}   # 228 = PCs; most others are pickup only
     queries:
       - optiplex micro
-      - optiplex
       - thinkcentre tiny
       - thinkcentre m720q
+      - thinkcentre m920q
+      - thinkcentre m70q
+      - thinkcentre m90q
       - elitedesk mini
       - prodesk mini
-      - mini pc
+      - hp elite mini
+      - esprimo q
       - intel nuc
+      - beelink
+      - minisforum
+      - mini pc
     # Instead of (or in addition to) queries you can paste a search URL from your browser,
     # filters included:  url: "https://www.vinted.de/catalog?search_text=optiplex&price_to=150"
     min_price: 20
@@ -85,7 +95,9 @@ searches:
   # Vinted's text search is fuzzy, so this takes the whole "Desktop-Computer" category
   # (3581) newest first and lets the scorer find the gems.
   # - name: desktops
+  #   sites: [vinted, kleinanzeigen]
   #   url: "https://www.vinted.de/catalog?catalog[]=3581"
+  #   kleinanzeigen: {category: 228, shipping: true}    # and Kleinanzeigen's whole PCs category
   #   min_price: 30
   #   max_price: 500
   #   fetch_details: 10
@@ -99,16 +111,19 @@ searches:
   #     shipping_estimate: 12
   #     # gpu: points per 1000 G3D Mark of a graphics card (GTX 1070 ≈ 13500 → 6.75 points)
   #     weights: {ram: 0.3, ram_cap: 64, storage: 0.004, storage_cap: 2000, gpu: 0.5}
-  #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}
+  #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0}   # 0 = never rank laptops
   #
   # Servers: rare names, so sort by relevance instead of newest first. Dual CPUs ("2x Xeon")
   # count twice, and rack/tower servers get 35 W extra idle draw (`extra_watts`), which is
   # what makes most of them expensive to run 24/7. Lower `hours_per_day` if yours won't be.
   # - name: servers
-  #   queries: [poweredge, proliant, supermicro, xeon, primergy, thinksystem, rack server, epyc]
+  #   sites: [vinted, kleinanzeigen]
+  #   queries: [poweredge, proliant, supermicro, xeon, epyc, primergy, thinksystem, rack server,
+  #             workstation, dell precision, hp z440, hp z4 g4, thinkstation]
   #   params: {order: relevance}
+  #   kleinanzeigen: {shipping: true}
   #   # relevance search also returns mini PCs; keep the titles server-like
-  #   include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|celsius|thinkstation)\\b"
+  #   include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|z[2-8]\\s*g[1-5]|celsius|thinkstation)\\b"
   #   pages: 2
   #   min_price: 30
   #   max_price: 800
@@ -122,30 +137,16 @@ searches:
   #     reject: [defect, lot, cpu_only, offsite]   # barebones are kept, scored with 0 GB RAM
   #     shipping_estimate: 20
   #     weights: {ram: 0.2, ram_cap: 256, storage: 0.003, storage_cap: 8000}
-  #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}
+  #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0}   # 0 = never rank laptops
   #     # extra_watts: {server: 35, tower: 5}
 
-  # ------------------------------------------- Kleinanzeigen.de as a second source
-  # Same scoring, different site: `site: kleinanzeigen`. Without search terms it takes the
-  # whole category (228 PCs, 225 PC accessories, 278 notebooks). Most listings there are
-  # pickup only, so either keep `shipping: true` or paste a search URL from your browser
-  # with your town and radius in it (url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50").
-  # Leave `offsite` out of `reject`: paying by PayPal is normal on Kleinanzeigen.
-  # - name: kleinanzeigen-pcs
-  #   site: kleinanzeigen
-  #   params: {category: 228, shipping: true}   # also: seller: privat
-  #   min_price: 30
-  #   max_price: 500
-  #   fetch_details: 10
-  #   notify: {min_value: 5, podium: 3}
-  #   scorer:
-  #     type: computer
-  #     min_cpu_mark: 6000
-  #     require_cpu: true
-  #     reject: [defect, lot, cpu_only]
-  #     shipping_estimate: 8
-  #     weights: {ram: 0.3, ram_cap: 64, storage: 0.004, storage_cap: 2000, gpu: 0.5}
-  #     form_factor: {tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1}
+  # ------------------------------------------- Kleinanzeigen.de
+  # Add `kleinanzeigen` to `sites` in any search above, or search it alone with `site: kleinanzeigen`
+  # (then `params` holds its filters). Without search terms it takes the whole category
+  # (228 PCs, 225 PC accessories, 278 notebooks). Most listings there are pickup only, so keep
+  # `shipping: true`, or paste a search URL with your town and radius in it:
+  #   url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50"
+  # `offsite` (pay outside Vinted) is ignored for Kleinanzeigen listings: PayPal is normal there.
 
   # ------------------------------------------- any other search: rules scorer
   # - name: lego-technic

@@ -60,8 +60,19 @@ are the usual bait behind a too-good price like an RTX 4080 PC for 400 €.
 
 ## Kleinanzeigen
 
-A search with `site: kleinanzeigen` runs on Kleinanzeigen.de with the same scoring, re-scoring and
-top-3 alerts. Without search terms it takes a whole category (`params: {category: 228}` = PCs).
+Any search can run on both sites: with `sites: [vinted, kleinanzeigen]` every search term runs on
+Vinted first, then on Kleinanzeigen, and all results share one ranking and one top-3 alert.
+`params` holds Vinted's filters, `kleinanzeigen` holds Kleinanzeigen's:
+
+```yaml
+- name: mini-pc
+  sites: [vinted, kleinanzeigen]
+  queries: [optiplex micro, thinkcentre m920q, elitedesk mini]
+  kleinanzeigen: {category: 228, shipping: true}   # 228 = PCs
+```
+
+Without search terms it takes the whole category on Kleinanzeigen. `site: kleinanzeigen` searches
+there only (its filters may then go in `params`).
 
 - `shipping: true` keeps only listings with "Versand möglich"; most others are pickup only. To
   search around your town instead, set your location and radius on the website and paste the URL
@@ -70,7 +81,10 @@ top-3 alerts. Without search terms it takes a whole category (`params: {category
 - Alerts show where the item is, whether it ships, and "VB" (price negotiable).
 - There's no Vinted buyer fee. Search results only include the start of a description, so the
   rest is fetched (within `fetch_details`) when specs are missing.
-- Leave `offsite` out of `reject` there: PayPal is the normal way to pay on Kleinanzeigen.
+- The `offsite` check (pay outside Vinted) only applies to Vinted listings: PayPal is the normal
+  way to pay on Kleinanzeigen.
+- Every term costs one request per site and run, so 14 terms on both sites are 28 requests every
+  30 minutes. Kleinanzeigen ids are stored with an offset (10^15) so they never clash with Vinted's.
 - Kleinanzeigen's terms of use don't allow automated access, just like Vinted's. Keep the run
   interval and page counts low, for personal use only.
 

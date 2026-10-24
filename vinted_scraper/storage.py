@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS podium (
 );
 """
 # Added after the first release; existing databases get them on open.
-COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL", "extra": "TEXT"}
+COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL", "extra": "TEXT",
+           "partial": "INTEGER"}  # 1: description is only the snippet from search results
 
 
 @dataclass
@@ -52,6 +53,7 @@ class Previous:
     price: float
     description: str
     notified_price: float | None
+    partial: bool = False  # the description is only a search snippet
 
 
 @dataclass
@@ -72,7 +74,7 @@ def listing_from_row(row: sqlite3.Row) -> Listing:
         id=row["id"], title=row["title"] or "", price=row["price"], currency=row["currency"] or "EUR",
         url=row["url"] or "", total_price=total, brand=row["brand"] or "",
         condition=row["condition"] or "", photo=row["photo"] or "", description=row["description"] or "",
-        extra=row["extra"] or "",
+        extra=row["extra"] or "", partial_description=bool(row["partial"]),
     )
 
 
@@ -89,27 +91,41 @@ class Store:
 
     def previous(self, search: str, item_id: int) -> Previous | None:
         row = self.db.execute(
-            "SELECT price, description, notified_price FROM items WHERE search=? AND id=?", (search, item_id)
+            "SELECT price, notified_price FROM items WHERE search=? AND id=?", (search, item_id)
         ).fetchone()
-        return Previous(row["price"], row["description"] or "", row["notified_price"]) if row else None
+        # A description fetched by any search serves them all: the same listing often turns up in several.
+        best = self.db.execute(
+            "SELECT description, partial FROM items WHERE id=? AND description != '' "
+            "ORDER BY COALESCE(partial, 0), length(description) DESC LIMIT 1",
+            (item_id,),
+        ).fetchone()
+        if not row and not best:
+            return None
+        return Previous(row["price"] if row else 0.0, best["description"] if best else "",
+                        row["notified_price"] if row else None, bool(best and best["partial"]))
 
     def upsert(self, search: str, listing, score) -> None:
         now = time.time()
         # Showing up in search results means it's for sale, so `gone` is cleared.
         self.db.execute(
             """INSERT INTO items (search, id, title, price, currency, cost, points, value, summary, url, photo,
-                                  description, reject, first_seen, last_seen, total_price, brand, condition, extra)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                  description, reject, first_seen, last_seen, total_price, brand, condition, extra,
+                                  partial)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT (search, id) DO UPDATE SET
                  title=excluded.title, price=excluded.price, cost=excluded.cost, points=excluded.points,
                  value=excluded.value, summary=excluded.summary, photo=excluded.photo,
-                 description=COALESCE(NULLIF(excluded.description, ''), items.description),
+                 description=CASE WHEN length(excluded.description) >= length(COALESCE(items.description, ''))
+                                  THEN excluded.description ELSE items.description END,
+                 partial=CASE WHEN length(excluded.description) >= length(COALESCE(items.description, ''))
+                              THEN excluded.partial ELSE items.partial END,
                  reject=excluded.reject, last_seen=excluded.last_seen, total_price=excluded.total_price,
                  brand=excluded.brand, condition=excluded.condition, extra=excluded.extra, gone=NULL""",
             (search, listing.id, listing.title, listing.price, listing.currency, score.cost, score.points,
              score.value, score.summary, listing.url, listing.photo, listing.description, score.reject, now, now,
              # Never NULL for new rows: NULL marks rows stored before the column existed.
-             listing.total_price or listing.price, listing.brand, listing.condition, listing.extra),
+             listing.total_price or listing.price, listing.brand, listing.condition, listing.extra,
+             int(listing.partial_description)),
         )
 
     def rows(self, search: str, max_age_hours: float | None = None) -> list[sqlite3.Row]:
@@ -129,7 +145,7 @@ class Store:
         return listing_from_row(row) if row else None
 
     def set_description(self, search: str, item_id: int, description: str) -> None:
-        self.db.execute("UPDATE items SET description=? WHERE search=? AND id=?", (description, search, item_id))
+        self.db.execute("UPDATE items SET description=?, partial=0 WHERE search=? AND id=?", (description, search, item_id))
 
     def update_score(self, search: str, item_id: int, score) -> None:
         self.db.execute(

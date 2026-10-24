@@ -157,7 +157,8 @@ _DUAL = re.compile(
 _E5_FALLBACK = {"1": 7500, "2": 9500, "3": 13000, "4": 16000}  # unlisted E5-26xx by version
 _E3_FALLBACK = {"1": 5500, "2": 6200, "3": 7000, "4": 7200, "5": 7700, "6": 8100}
 
-_INTEL_CORE = re.compile(r"\bi([3579])[\s-]?(\d{4,5})([a-z]\d?|[a-z]{1,2})?\b")
+# The suffix may be written apart: "i7 1165 g7", "i5 8500 t".
+_INTEL_CORE = re.compile(r"\bi([3579])[\s-]?(\d{4,5})\s?([a-z]\d?|[a-z]{1,2})?\b")
 _INTEL_LOW = re.compile(r"\b((?:n|j)\d{3,4}|g\d{4}t?)\b")
 _RYZEN = re.compile(r"\bryzen\s*(?:ai\s*)?([3579])\s*(pro\s*)?(\d{3,4})\s*([a-z]{1,2})?\b")
 _AMD_A = re.compile(r"\b(a\d{1,2}-\d{4}[a-z]?)\b")

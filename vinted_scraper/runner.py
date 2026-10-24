@@ -5,6 +5,7 @@ import json
 import logging
 import random
 import time
+from urllib.parse import urlparse
 
 from .client import BlockedError, ClientSettings, VintedClient
 from .config import Config, SearchConfig
@@ -38,9 +39,13 @@ class Runner:
             self._clients[domain] = self._client_factory(settings)
         return self._clients[domain]
 
+    def client_for(self, search: SearchConfig, url: str = "") -> VintedClient:
+        """The client of the site a listing came from (one search can span several sites)."""
+        return self.client(urlparse(url).netloc or search.domain)
+
     def fetch(self, search: SearchConfig) -> list[Listing]:
-        client = self.client(search.domain)
         seen: dict[int, Listing] = {}
+        blocked: set[str] = set()
         self._blocked.discard(search.name)
 
         def mostly_known(batch: list[dict]) -> bool:
@@ -49,8 +54,14 @@ class Runner:
             ids = [int(raw["id"]) for raw in batch if str(raw.get("id") or "").isdigit()]
             return self.store.known(search.name, ids) >= len(ids) / 2
 
-        for params in search.queries:
-            key = json.dumps(params, sort_keys=True)
+        for query in search.queries:
+            domain = query.get("domain") or search.domain
+            if domain in blocked:
+                continue
+            client = self.client(domain)
+            params = {k: v for k, v in query.items() if k != "domain"}
+            # Same key as before searches could span sites, so existing queries aren't crawled deep again.
+            key = json.dumps(params if domain == search.domain else query, sort_keys=True)
             # Each query is fetched `pages` deep once (also after `pages` was raised); after that
             # only until the listings from earlier runs start, usually a single page.
             full = self.store.crawled_pages(search.name, key) < search.pages
@@ -58,14 +69,16 @@ class Runner:
                 raw_items = client.search(params, pages=search.pages, until=None if full else mostly_known)
             except BlockedError as exc:
                 # Retries are exhausted: hammering on with the remaining queries only digs
-                # the hole deeper. Keep what we have and try again next run.
-                log.error("[%s] blocked on %s, skipping the rest of this run: %s",
-                          search.name, params.get("search_text") or params, exc)
+                # the hole deeper. Keep what we have and try again next run; other sites go on.
+                log.error("[%s] blocked on %s %s, skipping the rest of this site this run: %s",
+                          search.name, domain, params.get("search_text") or params, exc)
                 self._blocked.add(search.name)
-                break
+                blocked.add(domain)
+                continue
             if full:
                 self.store.set_crawled_pages(search.name, key, search.pages)
-            log.info("[%s] %s: %d items", search.name, params.get("search_text") or "(no text)", len(raw_items))
+            log.info("[%s] %s %s: %d items", search.name, domain.removeprefix("www."),
+                     params.get("search_text") or "(no text)", len(raw_items))
             for raw in raw_items:
                 try:
                     listing = Listing.from_api(raw)
@@ -92,13 +105,13 @@ class Runner:
             prev = self.store.previous(search.name, listing.id)
             # A description fetched earlier beats the snippet some sites put in search results.
             if prev and len(prev.description) > len(listing.description):
-                listing.description, listing.partial_description = prev.description, False
+                listing.description, listing.partial_description = prev.description, prev.partial
             try:
                 score = scorer.score(listing)
                 if (score.needs_details and detail_budget > 0 and score.reject in (None, "cpu unknown")
                         and (not listing.description or listing.partial_description)):
                     detail_budget -= 1
-                    desc = self.client(search.domain).item_description(listing.id)
+                    desc = self.client_for(search, listing.url).item_description(listing.id)
                     if desc:
                         listing.description, listing.partial_description = desc, False
                         if search.exclude and search.exclude.search(desc):
@@ -159,13 +172,15 @@ class Runner:
         checks, checked = rules.podium * 2, set()
         while True:
             rows = self.store.top(search.name, rules.podium, rules.podium_hours, rules.min_value)
-            unverified = [r["id"] for r in rows if r["id"] not in seen and r["id"] not in checked]
+            # Missing from this run's results (sold?) or only known from a search snippet: look at the listing.
+            unverified = [r["id"] for r in rows if (r["id"] not in seen or r["partial"]) and r["id"] not in checked]
             if not unverified or checks <= 0:
                 break
+            urls = {r["id"]: r["url"] for r in rows}
             for item_id in unverified[:checks]:
                 checks -= 1
                 checked.add(item_id)
-                page = self.client(search.domain).item_page(item_id)
+                page = self.client_for(search, urls[item_id]).item_page(item_id)
                 if page is None or page.available is None:
                     continue  # unknown: keep it ranked
                 if page.available:

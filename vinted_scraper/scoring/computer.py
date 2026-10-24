@@ -84,6 +84,8 @@ class ComputerScorer:
         summary = specs.summary()
 
         for flag in ("offsite", "defect", "lot", "cpu_only", "barebone", "no_psu"):
+            if flag == "offsite" and "kleinanzeigen." in listing.url:
+                continue  # paying by PayPal is normal there; only Vinted has its own checkout
             if flag in self.reject and getattr(specs, flag):
                 return Score(0, cost, summary, reject=flag)
         if self.require_cpu and not specs.cpu:

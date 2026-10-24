@@ -85,8 +85,15 @@ nothing. Start there when scraping breaks.
 
 ## Kleinanzeigen (`kleinanzeigen.py`)
 
-Second source, chosen per search with `site: kleinanzeigen` (sets `domain` www.kleinanzeigen.de;
-`runner.make_client` picks the client class by domain). Verified live on 2026-10-24:
+Second source. A search runs on `sites: [vinted, kleinanzeigen]` (or `site:` for one): `config._search`
+turns every search term into one query per site, each query dict carrying its `domain`
+(`params` = Vinted filters, `kleinanzeigen` = Kleinanzeigen filters; a Kleinanzeigen-only search may
+use `params`). The runner picks the client per query (`make_client` by domain) and per listing
+(`client_for` by the listing URL's host) for descriptions and availability checks. All results of a
+search share one ranking. Kleinanzeigen ids are stored as `ID_OFFSET` (10^15) + ad id so they can't
+collide with Vinted ids; `item_page` strips it. `crawled` keys leave out the domain for the search's
+main site, so queries crawled before multi-site support aren't crawled deep again. The scorer ignores
+`offsite` for Kleinanzeigen URLs. Verified live on 2026-10-24:
 
 - Search results are an Astro page. The `astro-island` whose `props` contain `resultAds` holds every
   listing (id, title, description snippet ending in "...", seoLink, price text like "120 € VB",
@@ -100,7 +107,9 @@ Second source, chosen per search with `site: kleinanzeigen` (sets `domain` www.k
 - `Listing.partial_description` marks the snippet: the runner fetches the full text when specs are
   missing, and a longer stored description wins over the snippet afterwards.
 - `Listing.extra` ("06112 Halle · nur Abholung · VB") is stored and shown in alerts.
-- PayPal is normal there, so Kleinanzeigen searches must not reject `offsite`.
+- PayPal is normal there, hence the scorer skips `offsite` for Kleinanzeigen listings.
+- The user's config: mini-pc (14 terms), desktops (Vinted category 3581 + Kleinanzeigen 228) and
+  servers (13 terms incl. workstations), all on both sites, Kleinanzeigen with `shipping: true`.
 
 ## Spec parsing rules (`specs.py`)
 

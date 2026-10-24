@@ -196,3 +196,18 @@ def test_availability_check_completes_the_description(tmp_path, catalog_items):
     runner2.run_once()
     assert "startet nicht" in runner2.store.listing("pcs", 101).description
     assert ids(rec2.podiums[0]) == [102, 105]  # the full text showed it is broken
+
+
+def test_podium_candidate_with_snippet_gets_its_full_description(tmp_path, catalog_items):
+    items = copy.deepcopy(catalog_items)
+    best = items[0]
+    best.update(description="Dell OptiPlex 7060 Micro. Es...", description_partial=True)
+    runner, fake, rec = podium_runner(tmp_path, items)
+    client = runner.client("www.vinted.de")
+    client.availability = {101: True}
+    client.descriptions = {101: "Dell OptiPlex 7060 Micro. Es fehlt: RAM, SSD und Netzteil"}
+    runner.run_once()
+    assert 101 in client.page_calls  # seen in this run, but only as a snippet
+    assert runner.store.listing("pcs", 101).partial_description is False
+    row = runner.store.db.execute("SELECT summary FROM items WHERE id=101").fetchone()
+    assert "barebone" in row["summary"] and "no_psu" in row["summary"]

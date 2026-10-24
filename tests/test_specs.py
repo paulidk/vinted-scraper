@@ -133,6 +133,15 @@ def test_flags():
     ("Dell Raid H330", True),
     ("ASRock Jupiter X600 Barebone – sehr wenig benutzt", False),
     ("MSi Cubi N (MS-B120) 8GB, 128GB SSD, Win11", False),
+    ("Carte mère Dell Precision 3551 Intel i7-10875H Nvidia P620", True),
+    ("AMD EPYC 7402 - 24 Cores - Socket SP3 - DELL LOCKED", True),
+    ("Dell PowerEdge R720 mit H710 RAID controller", False),
+    ("Dell i7 Sockel 1151 16GB 512GB SSD", False),
+    ("Server Lenovo SR550", False),
+    ("AMD Epyc 7302p 16 Cores 32 Threads PCIe 4.0 DELL vendor lock", True),
+    ("Gaming PC Ryzen 9 16 Cores 32 Threads 64GB RTX 3080", False),
+    ("Supermicro AS-E301-9D-8CN4 | EPYC 8C/16T | 16GB Ram ECC", False),
+    ("Intel Core i3-10100T 3.00GHz LGA 1200 (SRH3Q)", True),
     ("Kit GAMER Turbo Unlock - 64Go RAM - cpu Intel Xeon 10 cores 20 threads", True),
     ("Bundle server HP ProLiant DL380p Gen8 - doppia cpu Intel Xeon + 128gb ram DDR3 ECC", False),
     ("Dell PowerEdge R320 Server Xeon E5-2470 v2 10-Core 96GB DDR3 ECC RAM", False),
@@ -242,3 +251,37 @@ def test_multi_offer_counts_as_lot(title, lot):
 def test_missing_parts_and_negated_bios_lock(text, defect, barebone, no_psu):
     specs = parse_specs(text)
     assert (specs.defect, specs.barebone, specs.no_psu) == (defect, barebone, no_psu)
+
+
+@pytest.mark.parametrize("title, form_factor", [
+    ("Dell Precision 3550 ( i5 10 Generation )", "laptop"),
+    ("Dell Precision 7550 Workstation i7 32GB", "laptop"),
+    ("HP ZBook 15 G5", "laptop"),
+    ("Lenovo ThinkPad T480", "laptop"),
+    ("Dell Precision 3650 Tower i7", "tower"),
+    ("Dell Precision T5810 Xeon", None),
+])
+def test_laptops(title, form_factor):
+    assert parse_specs(title, title=title).form_factor == form_factor
+
+
+def test_cpu_suffix_written_apart_and_cpu_model_not_a_size_pair():
+    assert parse_specs("Mini PC Intel core i7 1165 g7 16GB").cpu.model == "i7-1165g7"
+    specs = parse_specs("HP Z820 Workstation | 2x Xeon E5-2680 | 128GB ecc | gtx 1080 8GB")
+    assert (specs.ram_gb, specs.storage_gb, specs.cpus) == (128, None, 2)
+
+
+def test_first_card_in_title_wins():
+    title = "Gaming PC Intel Core i5-12400F, Vega 56 (wie GTX 1070), 16GB DDR5"
+    assert parse_specs(title, title=title).gpu.model == "rx vega 56"
+
+
+@pytest.mark.parametrize("text, ram, storage", [
+    ("Lenovo ThinkStation P310 | Intel Core i7-6700 | 16 GB | SSD", 16, None),
+    ("HP Z4 G4 | Xeon W-2223 | 64GB ECC | 512GB | Quadro T1000", 64, 512),
+    ("Dell OptiPlex 5040 Intel i3-6100 / 128 GB SSD", None, 128),
+    ("Mini PC Atom 4GB RAM 16GB eMMC", 4, 16),
+])
+def test_model_numbers_and_small_disks(text, ram, storage):
+    specs = parse_specs(text)
+    assert (specs.ram_gb, specs.storage_gb) == (ram, storage)

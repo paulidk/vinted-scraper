@@ -24,6 +24,9 @@ from .client import BlockedError, ItemPage, VintedClient, _HTML_ACCEPT
 log = logging.getLogger(__name__)
 
 DOMAIN = "www.kleinanzeigen.de"
+# Listing ids are stored with this offset so they can't collide with Vinted ids when one search
+# ranks both sites together. Vinted ids are around 1e10, Kleinanzeigen ids around 3.5e9.
+ID_OFFSET = 10**15
 # Common categories: 228 PCs, 225 PC-Zubehör & Software, 278 Notebooks, 161 Elektronik
 _ISLAND = re.compile(r'<astro-island[^>]*\sprops="([^"]*resultAds[^"]*)"')
 _PRICE = re.compile(r"(\d[\d.]*(?:,\d+)?)\s*€")
@@ -58,7 +61,7 @@ def _normalize(ad: dict, base_url: str) -> dict:
     if ad.get("posterType") == "COMMERCIAL":
         extra.append("gewerblich")
     return {
-        "id": ad["id"],
+        "id": ID_OFFSET + int(ad["id"]),
         "title": ad.get("title") or "",
         "price": {"amount": parse_price(price_text) or 0, "currency_code": "EUR"},
         "url": base_url + (ad.get("seoLink") or f"/s-anzeige/{ad['id']}"),
@@ -147,10 +150,11 @@ class KleinanzeigenClient(VintedClient):
         return items
 
     def item_page(self, item_id: int | str) -> ItemPage | None:
+        ad_id = int(item_id) % ID_OFFSET
         try:
-            resp = self._get(f"/s-anzeige/{item_id}", None, _HTML_ACCEPT, self.base_url + "/", json_body=False)
+            resp = self._get(f"/s-anzeige/{ad_id}", None, _HTML_ACCEPT, self.base_url + "/", json_body=False)
         except BlockedError as exc:
-            log.info("could not fetch details for %s: %s", item_id, exc)
+            log.info("could not fetch details for %s: %s", ad_id, exc)
             return None
         if resp is None or "/s-anzeige/" not in urlparse(str(resp.url)).path:
             return ItemPage(available=False)  # deleted: redirected to the homepage

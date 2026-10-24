@@ -5,8 +5,8 @@ import pytest
 
 from vinted_scraper import client as client_mod
 from vinted_scraper.client import ClientSettings
-from vinted_scraper.kleinanzeigen import (KleinanzeigenClient, parse_listing_page, parse_price, parse_search_page,
-                                          search_path)
+from vinted_scraper.kleinanzeigen import (ID_OFFSET, KleinanzeigenClient, parse_listing_page, parse_price,
+                                          parse_search_page, search_path)
 from vinted_scraper.models import Listing
 
 
@@ -37,7 +37,8 @@ def test_parses_results_into_vinted_shape():
            ad(2, "Gaming PC", "1.299 €", shippingAvailableValue="", posterType="COMMERCIAL"),
            ad(3, "Reserviert • Mini PC")]
     items = parse_search_page(search_html(ads))
-    assert [i["id"] for i in items] == [1, 2]  # no sponsored slot, no reserved listing
+    assert [i["id"] % ID_OFFSET for i in items] == [1, 2]  # no sponsored slot, no reserved listing
+    assert all(i["id"] > ID_OFFSET for i in items)  # never the same id as a Vinted listing
     first, second = (Listing.from_api(i) for i in items)
     assert (first.price, first.currency, first.url) == (120, "EUR", "https://www.kleinanzeigen.de/s-anzeige/x/1-228-1")
     assert first.extra == "06112 Halle · Versand möglich · VB" and first.partial_description
@@ -114,9 +115,10 @@ def test_pages_until_short_page_or_known(client):
 
 
 def test_deleted_listing_redirects_home(client):
-    c, responses, _ = client
+    c, responses, log = client
     responses += [Resp("<html>home</html>", url="https://www.kleinanzeigen.de/")]
     assert c.item_page(1).available is False
     responses += [Resp('<p id="viewad-description-text">i7-8700T</p>')]
-    page = c.item_page(2)
+    page = c.item_page(ID_OFFSET + 2)
     assert page.available is True and page.description == "i7-8700T"
+    assert log[-1].endswith("/s-anzeige/2")  # the site's own id, without the offset

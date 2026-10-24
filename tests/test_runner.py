@@ -179,3 +179,49 @@ def test_snippet_description_is_completed_once(tmp_path, catalog_items):
     runner.run_once()
     assert fake["c"].detail_calls == []  # the stored full text beats the snippet from search results
     assert "32GB" in runner.store.previous("pcs", 105).description
+
+
+def test_one_search_ranks_both_sites(tmp_path, catalog_items):
+    from vinted_scraper.kleinanzeigen import ID_OFFSET
+
+    ka_items = []
+    for item in copy.deepcopy(catalog_items[:2]):
+        item.update(id=ID_OFFSET + item["id"], url=f"https://www.kleinanzeigen.de/s-anzeige/{item['id']}")
+        ka_items.append(item)
+    ka_items[0]["title"] = "ThinkCentre M920q i7-8700T 32GB 512GB SSD, Zahlung per PayPal"
+    ka_items[1].update(title="Mini PC sehr schnell", description="Mini PC...", description_partial=True)
+    search = SearchConfig(
+        name="pcs", domain="www.vinted.de", scorer={"type": "computer"}, notify=NotifyRules(min_value=1, top=10),
+        queries=[{"search_text": "optiplex", "domain": "www.vinted.de"},
+                 {"search_text": "optiplex", "domain": "www.kleinanzeigen.de"}], fetch_details=5,
+    )
+    cfg = Config(searches=[search], client=ClientSettings(), notifiers=[], database=str(tmp_path / "db.sqlite"))
+    clients = {}
+
+    def factory(settings):
+        items = ka_items if "kleinanzeigen" in settings.domain else catalog_items
+        descriptions = {ID_OFFSET + 102: "Mini PC, i5-8500T, 16GB RAM"} if "kleinanzeigen" in settings.domain else {}
+        clients[settings.domain] = FakeClient(settings, items, descriptions)
+        return clients[settings.domain]
+
+    runner = Runner(cfg, client_factory=factory)
+    runner.notifiers = []
+    deals = runner.run_once()
+    urls = [d.url for d in deals]
+    assert any("kleinanzeigen" in u for u in urls) and any("vinted" in u for u in urls)
+    assert "kleinanzeigen" in urls[0]  # the M920q beats everything on Vinted; PayPal is fine there
+    assert clients["www.kleinanzeigen.de"].detail_calls == [ID_OFFSET + 102]  # asked the right site
+    assert 105 in clients["www.vinted.de"].detail_calls
+    assert [p["search_text"] for p in clients["www.kleinanzeigen.de"].searches] == ["optiplex"]
+
+
+def test_description_fetched_by_one_search_serves_the_others(tmp_path, catalog_items):
+    runner, fake = make_runner(tmp_path, catalog_items, descriptions={105: "i7-8700T, 32GB RAM, 1TB NVMe"}, fetch_details=5)
+    runner.run_once()
+    other = SearchConfig(name="other", domain="www.vinted.de", queries=[{"search_text": "x"}], scorer={"type": "computer"},
+                         notify=NotifyRules(min_value=1, top=10), fetch_details=5)
+    runner.config.searches = [other]
+    fake["c"].detail_calls.clear()
+    runner.run_once()
+    assert 105 not in fake["c"].detail_calls  # no second fetch for the same listing
+    assert "i7-8700t" in runner.store.db.execute("SELECT summary FROM items WHERE search='other' AND id=105").fetchone()[0]

@@ -38,10 +38,44 @@ searches:
     pcs, lego = c.searches
     assert pcs.domain == "www.vinted.nl"
     assert pcs.queries == [
-        {"catalog_ids": "1,2", "search_text": "optiplex", "price_to": 200},
-        {"catalog_ids": "1,2", "search_text": "thinkcentre tiny", "price_to": 200},
+        {"catalog_ids": "1,2", "search_text": "optiplex", "domain": "www.vinted.nl", "price_to": 200},
+        {"catalog_ids": "1,2", "search_text": "thinkcentre tiny", "domain": "www.vinted.nl", "price_to": 200},
     ]
-    assert lego.domain == "www.vinted.de" and lego.queries == [{"search_text": "lego"}]
+    assert lego.domain == "www.vinted.de" and lego.queries == [{"search_text": "lego", "domain": "www.vinted.de"}]
+
+
+def test_one_search_on_both_sites(tmp_path):
+    cfg = tmp_path / "c.yaml"
+    cfg.write_text(
+        """
+searches:
+  - name: mini
+    sites: [vinted, kleinanzeigen]
+    queries: [optiplex micro]
+    params: {order: relevance}
+    kleinanzeigen: {category: 228, shipping: true}
+    max_price: 200
+  - name: desktops
+    sites: [vinted, kleinanzeigen]
+    url: "https://www.vinted.de/catalog?catalog[]=3581"
+    kleinanzeigen: {category: 228}
+  - name: ka-only
+    site: kleinanzeigen
+    params: {category: 228}
+  - name: ka-url
+    url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50"
+"""
+    )
+    mini, desktops, ka_only, ka_url = load_config(cfg).searches
+    assert mini.queries == [
+        {"order": "relevance", "search_text": "optiplex micro", "domain": "www.vinted.de", "price_to": 200},
+        {"category": 228, "shipping": True, "search_text": "optiplex micro", "domain": "www.kleinanzeigen.de", "price_to": 200},
+    ]
+    assert desktops.queries == [{"catalog_ids": "3581", "domain": "www.vinted.de"},
+                                {"category": 228, "domain": "www.kleinanzeigen.de"}]
+    assert ka_only.queries == [{"category": 228, "domain": "www.kleinanzeigen.de"}]
+    assert ka_url.domain == "www.kleinanzeigen.de"
+    assert ka_url.queries == [{"path": "/s-pcs/halle/c228l2409r50", "domain": "www.kleinanzeigen.de"}]
 
 
 def test_example_config_loads():
