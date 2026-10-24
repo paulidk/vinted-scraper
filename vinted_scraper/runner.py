@@ -32,6 +32,7 @@ class Runner:
         self._client_factory = client_factory
         self._clients: dict[str, VintedClient] = {}
         self._blocked: set[str] = set()  # searches whose fetch was cut short this run
+        self._gap: dict[str, float] = {}  # seconds until a search is due again, jitter included
 
     def client(self, domain: str) -> VintedClient:
         if domain not in self._clients:
@@ -210,8 +211,39 @@ class Runner:
         self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
 
     def run_once(self) -> list[Deal]:
+        """Run every search now, whatever its schedule."""
+        return self.run_searches(self.config.searches)
+
+    def run_due(self, slack: float = 0.0) -> list[Deal]:
+        """Run the searches whose interval is up, unless it's quiet hours.
+
+        `slack` lets a search run a bit early: a systemd timer that fires every 10 minutes
+        would otherwise turn a 20-minute interval into 30 when it fires a few seconds early.
+        """
+        now = time.time()
+        if self.config.is_quiet(_minute_of_day(now)):
+            log.info("quiet hours, nothing to do")
+            return []
+        due = [s for s in self.config.searches if self.seconds_until_due(s, now) <= slack]
+        return self.run_searches(due)
+
+    def seconds_until_due(self, search: SearchConfig, now: float) -> float:
+        last = self.store.last_run(search.name)
+        if last is None:
+            return 0.0
+        return last + self._gap.get(search.name, self.config.interval(search) * 60) - now
+
+    def _schedule(self, search: SearchConfig) -> None:
+        interval = self.config.interval(search) * 60
+        # ±jitter so runs never happen at exact, bot-like intervals; at most a quarter of the interval
+        spread = min(self.config.jitter_minutes * 60, interval / 4)
+        self._gap[search.name] = interval + random.uniform(-spread, spread)
+
+    def run_searches(self, searches: list[SearchConfig]) -> list[Deal]:
         all_deals: list[Deal] = []
-        for search in self.config.searches:
+        for search in searches:
+            self.store.set_last_run(search.name, time.time())
+            self._schedule(search)
             try:
                 result = self.run_search(search)
             except Exception:
@@ -229,10 +261,28 @@ class Runner:
 
     def run_forever(self) -> None:
         while True:
-            started = time.monotonic()
-            self.run_once()
-            interval = self.config.interval_minutes * 60
-            jitter = random.uniform(-1, 1) * self.config.jitter_minutes * 60
-            delay = max(60.0, interval + jitter - (time.monotonic() - started))
-            log.info("next run in %.1f min", delay / 60)
+            now = time.time()
+            if self.config.is_quiet(_minute_of_day(now)):
+                wait = _seconds_until(self.config.quiet_hours[1], now)
+                log.info("quiet hours, sleeping %.0f min", wait / 60)
+                time.sleep(wait)
+                continue
+            self.run_due()
+            now = time.time()
+            waits = {s.name: self.seconds_until_due(s, now) for s in self.config.searches}
+            name = min(waits, key=waits.get)
+            delay = max(60.0, waits[name])
+            log.info("next: %s in %.1f min", name, delay / 60)
             time.sleep(delay)
+
+
+def _minute_of_day(when: float) -> int:
+    t = time.localtime(when)
+    return t.tm_hour * 60 + t.tm_min
+
+
+def _seconds_until(minute_of_day: int, now: float) -> float:
+    """Seconds from `now` until the next time the local clock shows `minute_of_day`."""
+    t = time.localtime(now)
+    minutes = (minute_of_day - (t.tm_hour * 60 + t.tm_min)) % (24 * 60)
+    return max(60.0, minutes * 60 - t.tm_sec)

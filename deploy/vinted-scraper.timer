@@ -1,10 +1,10 @@
 [Unit]
-Description=Run the Vinted deal scraper every 30 minutes
+Description=Check every 10 minutes which Vinted scraper searches are due
 
 [Timer]
 OnBootSec=2min
-OnUnitActiveSec=30min
-RandomizedDelaySec=4min
+OnUnitActiveSec=10min
+RandomizedDelaySec=2min
 Persistent=true
 
 [Install]

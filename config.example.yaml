@@ -1,7 +1,8 @@
 # Copy to config.yaml and adjust. ${VAR} / ${VAR:-default} are read from the environment.
 
-interval_minutes: 30      # how often to scrape
-jitter_minutes: 4         # random +/- so runs never happen at exact, bot-like intervals
+interval_minutes: 30      # how often to scrape; each search can override it with its own interval_minutes
+jitter_minutes: 4         # random +/- so runs never happen at exact, bot-like intervals (max 1/4 of an interval)
+quiet_hours: [1, 7]       # no runs from 01:00 to 07:00 local time (also "23:30"); remove to run day and night
 database: data/vinted.db
 
 client:
@@ -29,6 +30,7 @@ notifiers:
 searches:
   # ---------------------------------------------------------------- mini PCs
   - name: mini-pc
+    interval_minutes: 20    # the main target and fastest to sell: check more often than the default
     # Every search term runs on each site listed here, Vinted first, and all results are ranked
     # together (one top 3). `params` are Vinted's filters, `kleinanzeigen` Kleinanzeigen's.
     # sites: [vinted, kleinanzeigen]
@@ -117,6 +119,7 @@ searches:
   # count twice, and rack/tower servers get 35 W extra idle draw (`extra_watts`), which is
   # what makes most of them expensive to run 24/7. Lower `hours_per_day` if yours won't be.
   # - name: servers
+  #   interval_minutes: 120   # few new listings, and they don't sell within the hour
   #   sites: [vinted, kleinanzeigen]
   #   queries: [poweredge, proliant, supermicro, xeon, epyc, primergy, thinksystem, rack server,
   #             workstation, dell precision, hp z440, hp z4 g4, thinkstation]

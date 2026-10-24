@@ -23,8 +23,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-v", "--verbose", action="store_true")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    sub.add_parser("run", help="scrape every interval_minutes, forever")
-    sub.add_parser("once", help="scrape once and exit (for cron / systemd timers)")
+    sub.add_parser("run", help="scrape forever, each search on its own interval, pausing in quiet_hours")
+    once = sub.add_parser("once", help="scrape every search once and exit")
+    once.add_argument("--if-due", action="store_true",
+                      help="only searches whose interval is up, nothing in quiet_hours (for cron / systemd timers)")
     top = sub.add_parser("top", help="show the best items seen recently")
     top.add_argument("search", nargs="?")
     top.add_argument("-n", type=int, default=15)
@@ -101,7 +103,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     runner = Runner(config)
-    if args.command == "once":
+    if args.command == "once" and args.if_due:
+        # The timer fires every 10 minutes: let a search run up to 5 minutes (or a quarter of its
+        # interval) early, so a 20-minute search doesn't slip to 30 because the timer came early.
+        runner.run_due(slack=min(300.0, min(config.interval(s) for s in config.searches) * 60 / 4))
+    elif args.command == "once":
         runner.run_once()
     else:
         runner.run_forever()

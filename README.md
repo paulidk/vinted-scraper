@@ -92,6 +92,20 @@ there only (its filters may then go in `params`).
 python -m vinted_scraper probe "https://www.kleinanzeigen.de/s-pcs/anzeige:angebote/versand:ja/c228"
 ```
 
+## Schedule
+
+`interval_minutes` (default 30) applies to every search, and a search can set its own: check what
+sells fast often, rare listings seldom. `quiet_hours: [1, 7]` pauses everything at night, when
+hardly anything gets listed and a 24/7 rhythm looks like a bot. When each search last ran is kept in
+the database, so restarting doesn't run everything again at once.
+
+- `run` stays up and starts each search when it's due.
+- `once` runs every search now. `once --if-due` only runs what's due and respects `quiet_hours`;
+  that's what the systemd timer calls every 10 minutes.
+
+Shorter isn't better: below about 15 minutes the extra speed isn't worth the higher risk of being
+blocked for hours.
+
 ## Top-3 alerts
 
 With `notify: {podium: 3}` a search keeps a ranking of its best 3 listings and sends it as one
@@ -130,7 +144,7 @@ python -m vinted_scraper -c config.yaml score "OptiPlex 7070 Micro i5-9500T 16GB
 - Never overrides the User-Agent, so it always matches the fingerprint. It also sends an
   `Accept-Language` that matches the Vinted country site.
 - Visits the homepage first to collect session cookies like a browser would, and renews them on 401.
-- Waits a random 2–6 s between requests, and adds ±4 min of jitter to the 30-minute schedule.
+- Waits a random 2–6 s between requests, and adds ±4 min of jitter to every search's schedule.
 - Loads each search term `pages` deep (default 5 pages of 96) only once. Results are newest
   first, so later runs stop paging at listings they have already seen, which usually means a
   single page per term.
@@ -182,7 +196,8 @@ also shows your tokens to anyone who can reach it. With Docker, run
 ### Run it permanently
 
 - **systemd** (on a Pi, NAS, or the mini PC itself): `deploy/vinted-scraper.service` +
-  `deploy/vinted-scraper.timer` run `once` every 30 minutes with a random delay.
+  `deploy/vinted-scraper.timer` run `once --if-due` every 10 minutes, which starts only the searches
+  whose interval is up.
 - **Docker**: `docker compose up -d` (mounts `config.yaml` and `./data`).
 
 ## Other searches

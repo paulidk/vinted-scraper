@@ -1,4 +1,5 @@
-# One-shot unit, triggered every 30 minutes by vinted-scraper.timer.
+# One-shot unit, triggered every 10 minutes by vinted-scraper.timer; it only runs the searches
+# whose own interval is up (interval_minutes per search) and nothing during quiet_hours.
 # Install: copy both files to /etc/systemd/system/, adjust paths/User, then
 #   systemctl daemon-reload && systemctl enable --now vinted-scraper.timer
 [Unit]
@@ -11,5 +12,5 @@ Type=oneshot
 User=vinted
 WorkingDirectory=/opt/vinted-scraper
 EnvironmentFile=-/opt/vinted-scraper/.env
-ExecStart=/opt/vinted-scraper/.venv/bin/python -m vinted_scraper -c config.yaml once
+ExecStart=/opt/vinted-scraper/.venv/bin/python -m vinted_scraper -c config.yaml once --if-due
 TimeoutStartSec=20min

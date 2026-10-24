@@ -37,6 +37,10 @@ CREATE TABLE IF NOT EXISTS crawled (
     pages INTEGER NOT NULL,  -- how deep it was fetched in full once
     PRIMARY KEY (search, query)
 );
+CREATE TABLE IF NOT EXISTS runs (
+    search TEXT PRIMARY KEY,
+    last_run REAL NOT NULL  -- when the search last started, for per-search intervals
+);
 CREATE TABLE IF NOT EXISTS podium (
     search TEXT PRIMARY KEY,
     ranking TEXT NOT NULL,  -- JSON list of {"id", "price", "title"}, best first
@@ -166,6 +170,15 @@ class Store:
     def set_crawled_pages(self, search: str, query: str, pages: int) -> None:
         self.db.execute("INSERT INTO crawled (search, query, pages) VALUES (?,?,?) "
                         "ON CONFLICT (search, query) DO UPDATE SET pages=excluded.pages", (search, query, pages))
+
+    def last_run(self, search: str) -> float | None:
+        row = self.db.execute("SELECT last_run FROM runs WHERE search=?", (search,)).fetchone()
+        return row["last_run"] if row else None
+
+    def set_last_run(self, search: str, when: float) -> None:
+        self.db.execute("INSERT INTO runs (search, last_run) VALUES (?,?) "
+                        "ON CONFLICT (search) DO UPDATE SET last_run=excluded.last_run", (search, when))
+        self.db.commit()
 
     def mark_gone(self, search: str, item_id: int) -> None:
         self.db.execute("UPDATE items SET gone=? WHERE search=? AND id=?", (time.time(), search, item_id))

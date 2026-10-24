@@ -29,7 +29,8 @@ python -m pytest -q                                 # all tests are offline, no 
 ruff check --select E,F,W,B --ignore E501 .         # lint config used so far
 python -m vinted_scraper probe "https://www.vinted.de/catalog?search_text=optiplex"  # live check
 python -m vinted_scraper -v -c config.yaml once     # one full run with debug logging
-python -m vinted_scraper -c config.yaml run         # every interval_minutes, forever
+python -m vinted_scraper -c config.yaml run         # forever, each search on its own interval, quiet_hours off
+python -m vinted_scraper -c config.yaml once        # every search now; `once --if-due` = only due ones (timer)
 python -m vinted_scraper -c config.yaml top         # best items seen in the last 72h (rescored first)
 python -m vinted_scraper -c config.yaml podium      # current top-N of every search
 python -m vinted_scraper -c config.yaml ui          # config editor at http://localhost:8765
@@ -73,7 +74,7 @@ nothing. Start there when scraping breaks.
 - **Anti-bot:** curl_cffi impersonates real browser TLS/HTTP2 fingerprints. The User-Agent
   is never overridden, because it must match the fingerprint. The client:
   - loads the homepage first to collect cookies, and renews the session on 401
-  - waits a random 2–6 s between requests; the schedule has ±4 min jitter
+  - waits a random 2–6 s between requests; each search's schedule has ±4 min jitter (≤ 1/4 interval)
   - on 403/429/challenge, backs off exponentially, then rotates fingerprint (and proxy)
   - stops the whole run on `BlockedError` instead of hammering on
 - **Expect Vinted to change its site again.** When it does, the catalog parsing in
@@ -153,6 +154,14 @@ the user's `desktops` search is the whole category 3581 (newest first) and `serv
 When you change the parser, add the listing text as a case to `test_ram_and_storage` in
 `tests/test_specs.py`. That table is the regression suite. CPU scores in `cpu_db.py` are
 deliberately rough (rankings, not benchmarks). Users correct them with `cpu_overrides`.
+
+## Schedule
+
+Per search `interval_minutes` (else the global one) and global `quiet_hours` ([start, end] local
+time, may wrap midnight). `runs` table keeps each search's last start; `Runner.run_due` runs what's
+due, `run_forever` sleeps until the next search is due or quiet hours end. `once --if-due` (systemd
+timer every 10 min) allows up to 5 min slack so a 20-min search doesn't slip to 30. The user runs
+mini-pc every 20 min, desktops 30, servers 120, quiet 1–7.
 
 ## Runner behaviour worth keeping
 

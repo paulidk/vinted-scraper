@@ -50,6 +50,7 @@ class SearchConfig:
     fetch_details: int = 0  # max descriptions fetched per run for items with missing specs
     scorer: dict = field(default_factory=dict)
     notify: NotifyRules = field(default_factory=NotifyRules)
+    interval_minutes: float | None = None  # how often this search runs; None = the global interval
 
     def keeps(self, listing) -> bool:
         if self.min_price is not None and listing.price < self.min_price:
@@ -71,6 +72,38 @@ class Config:
     database: str = "data/vinted.db"
     interval_minutes: float = 30
     jitter_minutes: float = 4
+    quiet_hours: tuple[int, int] | None = None  # (start, end) in minutes after midnight, local time; may wrap
+
+    def interval(self, search: SearchConfig) -> float:
+        return search.interval_minutes or self.interval_minutes
+
+    def is_quiet(self, minute_of_day: int) -> bool:
+        if not self.quiet_hours:
+            return False
+        start, end = self.quiet_hours
+        return start <= minute_of_day < end if start < end else minute_of_day >= start or minute_of_day < end
+
+
+def _clock(value) -> int:
+    """1, "1", "01:30" -> minutes after midnight."""
+    text = str(value).strip()
+    hours, _, minutes = text.partition(":")
+    total = int(hours) * 60 + int(minutes or 0)
+    if not 0 <= total <= 24 * 60:
+        raise ValueError(f"quiet_hours: {value!r} is not a time of day")
+    return total % (24 * 60)
+
+
+def _quiet_hours(raw) -> tuple[int, int] | None:
+    """`quiet_hours: [1, 7]` or `["23:30", "06:00"]`: no runs in between."""
+    if not raw:
+        return None
+    if isinstance(raw, str):
+        raw = raw.replace("–", "-").split("-")
+    if len(raw) != 2:
+        raise ValueError("quiet_hours: expected [start, end], e.g. [1, 7]")
+    start, end = _clock(raw[0]), _clock(raw[1])
+    return (start, end) if start != end else None
 
 
 def _search(raw: dict, default_domain: str) -> SearchConfig:
@@ -132,6 +165,7 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
         fetch_details=raw.get("fetch_details", 0),
         scorer=raw.get("scorer") or {},
         notify=NotifyRules(**(raw.get("notify") or {})),
+        interval_minutes=raw.get("interval_minutes"),
     )
 
 
@@ -152,4 +186,5 @@ def load_config(path: str | Path) -> Config:
         database=raw.get("database", "data/vinted.db"),
         interval_minutes=raw.get("interval_minutes", 30),
         jitter_minutes=raw.get("jitter_minutes", 4),
+        quiet_hours=_quiet_hours(raw.get("quiet_hours")),
     )
