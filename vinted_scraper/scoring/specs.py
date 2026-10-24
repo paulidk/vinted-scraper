@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-from .cpu_db import CpuInfo, lookup
+from .cpu_db import CpuInfo, cpu_count, lookup
 
 # "to" is French for TB, but "8 to 16GB" is English: never treat it as a unit before a number.
 # "2x8GB" is one 16GB size.
@@ -25,6 +25,9 @@ _DISK_SIZES = {1, 2, 4, 32, 64, 120, 128, 240, 250, 256, 320, 480, 500, 512, 960
 
 # Checked in order, first match wins ("mini tower" must hit tower before "mini" hits tiny).
 FORM_FACTORS = {
+    # rack and tower servers: big PSUs, fans and a BMC draw far more than a desktop
+    "server": r"\b(rack|rackmount|19\s*(?:zoll|inch|\")|[124]\s*u|poweredge|proliant|primergy|thinksystem|thinkserver|"
+              r"supermicro|microserver)\b",
     "tower": r"\b(mt|tower|midi|minitower|mini[\s-]*tower|workstation)\b",
     "sff": r"\b(sff|small\s*form(?:\s*factor)?|dt)\b",
     # mini/"1 litre" machines: what you usually want for a home server
@@ -50,16 +53,36 @@ NO_PSU = re.compile(
 LOT = re.compile(r"\b(lot\s*(?:de|of)?\s*\d|[2-9]\d*\s*(?:x\s*)?(?:pcs|pieces|pièces|stück|stk|szt))\b")
 # A loose processor rather than a computer: a socket, an Intel sSpec code or "Prozessor" in the title...
 CPU_PART = re.compile(
-    r"\b(fc)?lga\s*-?\d{3,4}\b|\bam[345]\b|\b(sockel|socket|tray|boxed)\b|\bsr[0-9a-z]{3}\b|\b\d+c\s*/\s*\d+t\b|"
-    r"^\s*(cpu|processor|prozessor|processeur|processore|procesor|procesador|processador)\b"
+    r"\b(fc)?lga\s*-?\d{3,4}\b|\b(am[345]|sp[35]|s?tr[45])\b|\b(sockel|socket|tray|boxed)\b|\bsr[0-9a-z]{3}\b|"
+    r"\b\d+c\s*/\s*\d+t\b"
 )
-# ...unless the title also names a whole machine or its RAM/storage.
-MACHINE = re.compile(
+# Starting with the word is a strong sign, even with a maker in the title ("CPU Dell AMD Epyc 7402").
+CPU_FIRST = re.compile(r"^\W*(cpu|processor|prozessor|processeur|processore|procesor|procesador|processador)\b")
+# ...unless the title also names a whole machine: what it is, its model line, a maker or a RAM/storage size.
+MACHINE_NOUN = re.compile(
     r"\b(pc|computer|rechner|ordinateur|ordenador|komputer|desktop|tower|sff|micro|tiny|mini|nuc\w*|laptop|notebook|"
-    r"thin\s*client|server|workstation|dell|lenovo|hp|fujitsu|asus|acer|msi|intel\s*nuc|optiplex|thinkcentre|"
-    r"thinkpad|elitedesk|prodesk|elitebook|esprimo|futro|vostro|veriton|beelink|minisforum|gmktec|chromebox|"
-    r"m\d{2,3}[qsa]|\d+\s*(?:gb|go|tb|to))\b"
+    r"thin\s*client|workstation|nas|rack|[124]\s*u|microserver)\b|\b19\s*(?:\"|zoll|inch)"
 )
+SERVER_WORD = re.compile(r"\b(server|serveur|servidor|serwer|homeserver)\b")
+MODEL_LINE = re.compile(
+    r"\b(optiplex|thinkcentre|thinkstation|thinkpad|elitedesk|prodesk|elitebook|esprimo|celsius|futro|vostro|precision|"
+    r"veriton|poweredge|proliant|primergy|thinksystem|thinkserver|beelink|minisforum|gmktec|chromebox|"
+    r"m\d{2,3}[qsa]|z\d{3}|t\d{3,4}|r\d{3})\b"
+)
+MAKER_NAME = re.compile(r"\b(dell|lenovo|hp|fujitsu|asus|acer|msi|supermicro|gigabyte|intel\s*nuc)\b")
+MAKER = re.compile(r"\b(dell|lenovo|hp|fujitsu|asus|acer|msi|supermicro|gigabyte|intel\s*nuc)\b|\b\d+\s*(?:gb|go|tb|to)\b")
+# Boards and controllers, which often carry a maker name ("Supermicro scheda madre dual xeon").
+PART = re.compile(
+    r"\b(mainboard|motherboard|mobo|scheda\s*madre|carte\s*m[eè]re|placa\s*base|moederbord|p[łl]yta\s*g[łl][óo]wna|"
+    r"hba|raid[\s-]*(?:controller|karte|card|carte)|backplane|riser|x58|x79|x99|x299|c602|c612)\b"
+)
+_BOARD = r"(x58|x79|x99|x299|c602|c612)\w*|mainboard|motherboard|mobo|carte\s*m[eè]re|scheda\s*madre"
+KIT = re.compile(rf"\b(kit|bundle)\b.*\b({_BOARD})\b|\b({_BOARD})\b.*\b(kit|bundle)\b")
+# "Kit GAMER - 64Go RAM - cpu Intel Xeon 10 cores": a kit of CPU and RAM is still not a machine
+KIT_PARTS = re.compile(r"\b(kit|bundle)\b.*\b(cpu|processeur|prozessor|processore|ram|ddr\d)\b")
+DISK = re.compile(r"\b(ssd|hdd|nvme|m\.?2|disk|disque|festplatte|\d+\s*(?:tb|to))\b")
+BUNDLED = re.compile(r"\+|&|\b(mit|with|avec|con|und|et|inkl\w*|incl\w*)\b")
+RAM = re.compile(r"\b(ram|ddr\d|\d+\s*(?:gb|go)\b)")
 WIFI = re.compile(r"\b(wi-?fi|wlan|802\.11)\b")
 
 
@@ -75,12 +98,14 @@ class Specs:
     no_psu: bool = False
     lot: bool = False
     cpu_only: bool = False
+    cpus: int = 1  # sockets: 2 for "2x Xeon ..."
     wifi: bool = False
 
     def summary(self) -> str:
         parts = []
         if self.cpu:
-            parts.append(f"{self.cpu.model}{'~' if self.cpu.estimated else ''} ({self.cpu.mark} pts, {self.cpu.tdp}W)")
+            dual = "2x " if self.cpus > 1 else ""
+            parts.append(f"{dual}{self.cpu.model}{'~' if self.cpu.estimated else ''} ({self.cpu.mark} pts, {self.cpu.tdp}W)")
         if self.ram_gb:
             parts.append(f"{self.ram_gb:g}GB RAM")
         if self.storage_gb:
@@ -171,6 +196,8 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -
         _Size(m.start(), m.end(), _gb(number, unit) * int(count or 1), unit)
         for m in _SIZE.finditer(t)
         for count, number, unit in [m.groups()]
+        # A bare "g" is also a model suffix: "Ryzen 5 5600G", "Xeon E-2176G" are not sizes.
+        if unit != "g" or (_gb(number, unit) in _RAM_SIZES | _DISK_SIZES and not re.search(r"[a-z]-\s*$", t[: m.start(2)]))
     ]
     assigned = _assign(t, sizes)
     ram_candidates = [sizes[i].gb for i, kind in assigned.items() if kind == "ram"]
@@ -207,8 +234,23 @@ def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "") -
     specs.barebone = bool(BAREBONE.search(t))
     specs.no_psu = bool(NO_PSU.search(t))
     specs.lot = bool(LOT.search(t))
+    specs.cpus = cpu_count(t) if specs.cpu else 1
     head = (title or text.split("\n", 1)[0]).lower()
-    # A title that is just a CPU model ("Intel Core i5 7500") is a processor for sale too.
-    specs.cpu_only = not MACHINE.search(head) and bool(CPU_PART.search(head) or lookup(head, cpu_overrides))
+    noun, server, line, maker = (rx.search(head) for rx in (MACHINE_NOUN, SERVER_WORD, MODEL_LINE, MAKER))
+    cpu = lookup(head, cpu_overrides)
+    specs.cpu_only = bool(
+        # "Carte mère serveur Supermicro" is a board, "19\" Server mit Gigabyte Mainboard" a server
+        ((part := PART.search(head)) and not (noun or line) and not (server and server.start() < part.start()))
+        or (KIT.search(head) and not line)  # "Kit Serveur/Workstation X99 Xeon + 64Go RAM"
+        or (KIT_PARTS.search(head) and not (noun or server or line))
+        # "Processeur serveur Xeon E5-2673 v4 LGA2011" is still a processor
+        or (CPU_FIRST.search(head) and not (noun or line))
+        or (CPU_PART.search(head) and not (noun or line or maker))
+        # a title that is just a CPU model ("Intel Core i5 7500") is a processor for sale too
+        or (not (noun or server or line or maker) and cpu)
+        # CPU + RAM without storage or any machine name: "Intel Xeon E5-2660 + 64Go RAM"
+        or (cpu and RAM.search(head) and BUNDLED.search(head)
+            and not (DISK.search(head) or noun or server or line or MAKER_NAME.search(head)))
+    )
     specs.wifi = bool(WIFI.search(t))
     return specs

@@ -22,7 +22,9 @@ DEFAULT_WEIGHTS = {
     "ssd_bonus": 1.0,
     "wifi_bonus": 0.0,
 }
-DEFAULT_FORM_FACTOR = {"tiny": 1.15, "sff": 1.0, "tower": 0.8, "laptop": 0.9, "unknown": 0.95}
+DEFAULT_FORM_FACTOR = {"tiny": 1.15, "sff": 1.0, "tower": 0.8, "server": 0.8, "laptop": 0.9, "unknown": 0.95}
+# Idle watts on top of the CPU: PSU, fans, drive bays, a server's BMC.
+DEFAULT_EXTRA_WATTS = {"server": 35, "tower": 5}
 # Typical *idle* draw of the whole machine by CPU TDP class; home servers idle most of the time.
 IDLE_WATTS = [(6, 6), (15, 8), (28, 10), (35, 11), (45, 14), (65, 18)]
 LOAD_SHARE = 0.1  # fraction of the time spent near TDP
@@ -46,6 +48,7 @@ class ComputerScorer:
         years: float = 2.0,
         hours_per_day: float = 24.0,
         cpu_overrides: dict | None = None,
+        extra_watts: dict | None = None,
     ):
         self.w = {**DEFAULT_WEIGHTS, **(weights or {})}
         self.form_factor = {**DEFAULT_FORM_FACTOR, **(form_factor or {})}
@@ -62,9 +65,11 @@ class ComputerScorer:
         self.years = years
         self.hours_per_day = hours_per_day
         self.cpu_overrides = cpu_overrides
+        self.extra_watts = {**DEFAULT_EXTRA_WATTS, **(extra_watts or {})}
 
-    def energy_cost(self, tdp: int) -> float:
+    def energy_cost(self, tdp: int, extra_watts: float = 0) -> float:
         idle = next((w for limit, w in IDLE_WATTS if tdp <= limit), IDLE_WATTS[-1][1] + (tdp - 65) * 0.2)
+        idle += extra_watts
         avg_watts = idle * (1 - LOAD_SHARE) + tdp * LOAD_SHARE
         kwh = avg_watts / 1000 * self.hours_per_day * 365 * self.years
         return kwh * self.kwh_price
@@ -85,8 +90,10 @@ class ComputerScorer:
         if specs.ram_gb is not None and specs.ram_gb < self.min_ram_gb:
             return Score(0, cost, summary, reject=f"ram below {self.min_ram_gb:g}GB")
 
-        mark = specs.cpu.mark if specs.cpu else self.unknown_cpu_mark
-        tdp = specs.cpu.tdp if specs.cpu else 35
+        # A second socket adds a bit less than double the speed, but all of the power.
+        mark = specs.cpu.mark * (1.9 if specs.cpus > 1 else 1) if specs.cpu else self.unknown_cpu_mark
+        tdp = specs.cpu.tdp * specs.cpus if specs.cpu else 35
+        energy = self.energy_cost(tdp, self.extra_watts.get(specs.form_factor or "", 0))
         ram = specs.ram_gb if specs.ram_gb is not None else (0 if specs.barebone else self.assume_ram_gb)
         storage = specs.storage_gb or 0
 
@@ -99,10 +106,10 @@ class ComputerScorer:
         if specs.barebone:
             points *= self.barebone_factor
 
-        cost += self.energy_cost(tdp)
+        cost += energy
         if specs.no_psu:
             cost += self.no_psu_penalty
-        summary += f" | energy {self.energy_cost(tdp):.0f} {listing.currency}/{self.years:g}y"
+        summary += f" | energy {energy:.0f} {listing.currency}/{self.years:g}y"
         return Score(
             points=round(points, 2),
             cost=round(cost, 2),

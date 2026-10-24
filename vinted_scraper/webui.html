@@ -184,13 +184,21 @@ const TEMPLATES = {
   "Mini PC": () => ({ name: "mini-pc", queries: ["optiplex micro", "thinkcentre tiny", "elitedesk mini", "mini pc"], min_price: 20, max_price: 250,
     exclude: "\\b(monitor|bildschirm|écran|tastatur|keyboard|clavier|vesa|halterung)\\b", fetch_details: 10,
     notify: { min_value: 8, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.computer() }),
+  "Desktop PCs (whole category)": () => ({ name: "desktops", urls: ["https://www.vinted.de/catalog?catalog[]=3581"], min_price: 30, max_price: 500,
+    fetch_details: 10, notify: { min_value: 5, podium: 3, price_drop: true },
+    scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 12,
+      form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1 } } }),
+  "Servers": () => ({ name: "servers", queries: ["poweredge", "proliant", "supermicro", "xeon", "primergy", "thinksystem", "rack server", "epyc"],
+    params: { order: "relevance" }, include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|celsius|thinkstation)\\b", pages: 2, min_price: 30, max_price: 800, fetch_details: 10, notify: { min_value: 3, podium: 3, price_drop: true },
+    scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 5000, require_cpu: true, assume_ram_gb: 16, shipping_estimate: 20,
+      weights: { ram: 0.2, ram_cap: 256, storage: 0.003, storage_cap: 8000 }, form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1 } } }),
   "Any item (rules)": () => ({ name: "", queries: [], notify: { min_value: 0, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.rules() }),
   "Cheapest first": () => ({ name: "", queries: [], notify: { top: 3, price_drop: true }, scorer: SCORER_DEFAULTS.price() }),
 };
 
 function computerScorer(sc) {
-  const w = obj(sc, "weights"), ff = obj(sc, "form_factor");
-  const reject = new Set(sc.reject ?? ["defect", "lot"]);
+  const w = obj(sc, "weights"), ff = obj(sc, "form_factor"), xw = obj(sc, "extra_watts");
+  const reject = new Set(sc.reject ?? ["defect", "lot", "cpu_only"]);
   const rejectBox = (flag, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
     onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label);
   return [
@@ -210,7 +218,9 @@ function computerScorer(sc) {
       field(sc, "hours_per_day", "Hours on per day", { type: "number", placeholder: "24" }),
       field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" }),
       field(sc, "no_psu_penalty", "Extra cost if no PSU", { type: "number", placeholder: "15" }),
-      field(sc, "barebone_factor", "Score × if barebone", { type: "number", placeholder: "0.85" })),
+      field(sc, "barebone_factor", "Score × if barebone", { type: "number", placeholder: "0.85" }),
+      field(xw, "server", "Extra idle watts: server", { type: "number", placeholder: "35", hint: "PSUs, fans, BMC" }),
+      field(xw, "tower", "Extra idle watts: tower", { type: "number", placeholder: "5" })),
     h("h3", {}, "Weights"),
     h("div", { class: "grid" },
       field(w, "cpu", "Points per 1000 CPU score", { type: "number", placeholder: "1.0" }),
@@ -225,6 +235,7 @@ function computerScorer(sc) {
       field(ff, "tiny", "Micro / Tiny / Mini", { type: "number", placeholder: "1.15" }),
       field(ff, "sff", "SFF", { type: "number", placeholder: "1.0" }),
       field(ff, "tower", "Tower", { type: "number", placeholder: "0.8" }),
+      field(ff, "server", "Server (rack, PowerEdge, ProLiant…)", { type: "number", placeholder: "0.8" }),
       field(ff, "laptop", "Laptop", { type: "number", placeholder: "0.9" }),
       field(ff, "unknown", "Unknown", { type: "number", placeholder: "0.95" })),
   ];
@@ -306,6 +317,8 @@ function searchCard(s, i, open) {
     h("div", { class: "grid" },
       field(s, "min_price", "Min price", { type: "number" }),
       field(s, "max_price", "Max price", { type: "number" }),
+      field(obj(s, "params"), "order", "Sort results by", { type: "select", default: "newest_first",
+        options: [["newest_first", "Newest first"], ["relevance", "Relevance (for rare terms like poweredge)"]] }),
       field(s, "pages", "Max result pages per term", { type: "number", placeholder: "5", hint: "96 per page; fetched in full once, then only until known listings" }),
       field(s, "fetch_details", "Descriptions to fetch per run", { type: "number", placeholder: "0", hint: "for listings with vague titles" }),
       field(s, "include", "Title must match (regex)", { placeholder: "optiplex|thinkcentre" }),

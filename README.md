@@ -5,7 +5,8 @@ notifies you (console / Discord / Telegram / ntfy / webhook) about the best new 
 price drops.
 
 It comes with a scorer for **used mini PCs** (OptiPlex Micro, ThinkCentre Tiny, EliteDesk/ProDesk
-Mini, NUC, Beelink, ...). For any other search there is a generic **rules** scorer, and the
+Mini, NUC, Beelink, ...) that also handles desktops, workstations and servers (Xeon, EPYC,
+dual-socket). For any other search there is a generic **rules** scorer, and the
 **price** scorer simply ranks cheapest first.
 
 ## How the mini PC score works
@@ -18,8 +19,8 @@ value  = 100 × points / cost          → "points per 100 €", what everything
 ```
 
 - **CPU**: recognises Intel Core 2nd–14th gen (desktop, T, U, G7, P and H parts), N100/N5105/J4125
-  and similar, Pentium G, and Ryzen (GE, U, H, HS) from the title and description. It has a table
-  of about 165 common mini PC CPUs with approximate PassMark scores and TDP. Unknown models are
+  and similar, Pentium G, Ryzen (desktop, GE, U, H, HS), Xeon and EPYC from the title and
+  description. It has a table of about 380 common CPUs with approximate PassMark scores and TDP. Unknown models are
   estimated from tier + generation + suffix. Listings that only say "i5 8th gen" are handled too.
 - **Power draw**: TDP class → estimated idle/average watts → kWh → money, added to the cost.
   A 65 W desktop CPU therefore loses to an equally fast 35 W T-series part, and an N100 does
@@ -32,6 +33,21 @@ value  = 100 × points / cost          → "points per 100 €", what everything
   penalty to them instead.
 - When the title has no CPU or RAM info, it fetches the item description (up to
   `fetch_details` per run) and caches it.
+
+## Desktops and servers
+
+`config.example.yaml` has two more searches (commented out):
+
+- **desktops** takes Vinted's whole "Desktop-Computer" category (`catalog[]=3581`) newest first
+  instead of search terms. Vinted's text search is fuzzy ("server" finds soda machines), and the
+  category catches every tower, gaming PC and workstation. Form factors are weighted equally.
+- **servers** searches rare names (poweredge, proliant, supermicro, xeon, ...) sorted by
+  **relevance**, which works much better than newest first for those. Xeon E3/E5/E-2xxx/W/Scalable/D
+  and EPYC are in the CPU table, `2x Xeon` counts both sockets (speed ×1.9, power ×2), and rack or
+  tower servers get 35 W extra idle draw (`extra_watts`). At 24/7 that running cost is what
+  makes most servers poor value; lower `hours_per_day` if yours won't run all day.
+
+Loose CPUs, mainboards and RAID controllers are skipped (`reject: cpu_only`).
 
 ## Top-3 alerts
 

@@ -1,4 +1,4 @@
-"""Rough CPU performance / power data for CPUs commonly found in used mini PCs.
+"""Rough CPU performance / power data for CPUs commonly found in used mini PCs, desktops and servers.
 
 `mark` is an approximate PassMark multi-thread CPU Mark, `tdp` is in watts.
 Numbers are deliberately rounded: they only need to rank CPUs against each
@@ -76,8 +76,86 @@ KNOWN: dict[str, tuple[int, int]] = {
     "ryzen 5 7430u": (16000, 15), "ryzen 7 7730u": (18500, 15), "ryzen 5 6600h": (20000, 45),
     "ryzen 7 6800h": (23500, 45), "ryzen 9 6900hx": (25000, 45), "ryzen 5 7640hs": (23000, 35),
     "ryzen 7 7735hs": (24000, 35), "ryzen 7 7840hs": (29000, 35), "ryzen 7 8845hs": (29500, 35),
-    "ryzen 9 7940hs": (30500, 35), "ryzen 7 255": (29000, 45)
+    "ryzen 9 7940hs": (30500, 35), "ryzen 7 255": (29000, 45),
+    # AMD desktop
+    "ryzen 5 1600": (12000, 65), "ryzen 7 1700": (13700, 65), "ryzen 5 2600": (13200, 65), "ryzen 7 2700": (15500, 65),
+    "ryzen 5 2400g": (8800, 65), "ryzen 3 3200g": (7200, 65), "ryzen 5 3400g": (9300, 65), "ryzen 5 3600": (17800, 65),
+    "ryzen 7 3700x": (22600, 65), "ryzen 9 3900x": (32500, 105), "ryzen 5 4600g": (16300, 65), "ryzen 5 5500": (19500, 65),
+    "ryzen 5 5600": (21500, 65), "ryzen 5 5600x": (22000, 65), "ryzen 5 5600g": (19800, 65), "ryzen 7 5700g": (24600, 65),
+    "ryzen 7 5700x": (26500, 65), "ryzen 7 5800x": (28000, 105), "ryzen 9 5900x": (39000, 105), "ryzen 9 5950x": (46000, 105),
+    "ryzen 5 7600": (27000, 65), "ryzen 7 7700x": (35000, 105),
+    # Intel Xeon E3 (4 cores, Dell T/R1xx-3xx, HP MicroServer, Fujitsu TX1xx)
+    "e3-1220 v2": (4500, 69), "e3-1230 v2": (6100, 69), "e3-1240 v2": (6300, 69), "e3-1270 v2": (6600, 69),
+    "e3-1220 v3": (4900, 80), "e3-1225 v3": (5000, 84), "e3-1230 v3": (7000, 80), "e3-1231 v3": (7100, 80),
+    "e3-1240 v3": (7200, 80), "e3-1241 v3": (7300, 80), "e3-1245 v3": (7300, 84), "e3-1271 v3": (7600, 80),
+    "e3-1220 v5": (5300, 80), "e3-1225 v5": (5500, 80), "e3-1230 v5": (7600, 80), "e3-1240 v5": (7900, 80),
+    "e3-1245 v5": (8000, 80), "e3-1270 v5": (8200, 80), "e3-1220 v6": (5700, 72), "e3-1225 v6": (5900, 73),
+    "e3-1230 v6": (8000, 72), "e3-1240 v6": (8300, 72), "e3-1245 v6": (8400, 73), "e3-1270 v6": (8600, 72),
+    # Intel Xeon E5 (PowerEdge R/T 6xx-7xx, ProLiant DL360/380, workstations)
+    "e5-2620": (5800, 95), "e5-2630": (6500, 95), "e5-2640": (6200, 95), "e5-2650": (8500, 95), "e5-2660": (9000, 95),
+    "e5-2670": (9600, 115), "e5-2680": (10000, 130), "e5-2690": (10600, 135), "e5-2630l": (5500, 60), "e5-2650l": (7000, 70),
+    "e5-2420 v2": (6500, 80), "e5-2430 v2": (7000, 80), "e5-2450 v2": (9500, 95), "e5-2470 v2": (11000, 95),
+    "e5-2620 v2": (6900, 80), "e5-2630 v2": (7600, 80), "e5-2640 v2": (8000, 95), "e5-2650 v2": (9900, 95),
+    "e5-2660 v2": (11000, 95), "e5-2667 v2": (11000, 130), "e5-2670 v2": (11800, 115), "e5-2680 v2": (12300, 115),
+    "e5-2690 v2": (13000, 130), "e5-2695 v2": (13500, 115), "e5-2697 v2": (14000, 130),
+    "e5-1620 v2": (6300, 130), "e5-1650 v2": (9700, 130), "e5-1660 v2": (11000, 130),
+    "e5-1620 v3": (7500, 140), "e5-1650 v3": (10500, 140), "e5-1660 v3": (12500, 140),
+    "e5-2620 v3": (8000, 85), "e5-2630 v3": (10500, 85), "e5-2640 v3": (10800, 90), "e5-2650 v3": (12900, 105),
+    "e5-2660 v3": (13800, 105), "e5-2670 v3": (15300, 120), "e5-2680 v3": (16300, 120), "e5-2690 v3": (17500, 135),
+    "e5-2695 v3": (17800, 120), "e5-2697 v3": (19500, 145), "e5-2698 v3": (20000, 135), "e5-2699 v3": (21500, 145),
+    "e5-1620 v4": (7800, 140), "e5-1650 v4": (11000, 140), "e5-1680 v4": (13500, 140),
+    "e5-2620 v4": (9500, 85), "e5-2630 v4": (11800, 85), "e5-2640 v4": (12300, 90), "e5-2650 v4": (14800, 105),
+    "e5-2660 v4": (16700, 105), "e5-2673 v4": (19000, 135), "e5-2680 v4": (18500, 120), "e5-2683 v4": (19800, 120),
+    "e5-2690 v4": (19800, 135), "e5-2695 v4": (20500, 120), "e5-2697 v4": (22000, 145), "e5-2698 v4": (23000, 135),
+    "e5-2699 v4": (24000, 145),
+    # Intel Xeon E-2xxx (Dell T/R3x0, HP ML/DL20, Fujitsu TX1330)
+    "e-2124": (6700, 71), "e-2124g": (6800, 71), "e-2126g": (9500, 80), "e-2134": (7900, 71), "e-2136": (12500, 80),
+    "e-2144g": (8000, 71), "e-2146g": (12800, 80), "e-2174g": (9000, 71), "e-2176g": (13500, 80), "e-2186g": (14000, 95),
+    "e-2224": (7200, 71), "e-2224g": (7300, 71), "e-2226g": (10000, 80), "e-2234": (8500, 71), "e-2236": (13500, 80),
+    "e-2244g": (9000, 71), "e-2246g": (13700, 80), "e-2274g": (9700, 83), "e-2276g": (14000, 80), "e-2278g": (17000, 80),
+    "e-2286g": (14500, 95), "e-2288g": (17800, 95), "e-2314": (9500, 65), "e-2324g": (10000, 65), "e-2334": (13500, 65),
+    "e-2336": (18500, 65), "e-2356g": (19500, 80), "e-2378g": (22000, 80), "e-2386g": (20500, 95), "e-2388g": (23500, 95),
+    # Intel Xeon W (Dell Precision, HP Z, Lenovo P workstations)
+    "w-2102": (5800, 120), "w-2104": (6200, 120), "w-2123": (8500, 120), "w-2125": (9400, 120), "w-2133": (12000, 140),
+    "w-2135": (13000, 140), "w-2145": (16000, 140), "w-2155": (19000, 140), "w-2175": (22000, 140), "w-2195": (26000, 140),
+    "w-2223": (9000, 120), "w-2225": (9800, 105), "w-2235": (14000, 130), "w-2245": (17000, 155), "w-2255": (20500, 165),
+    "w-2265": (22000, 165), "w-2275": (25500, 165), "w-2295": (30000, 165),
+    # Intel Xeon Scalable
+    "bronze 3104": (5500, 85), "bronze 3106": (7000, 85), "bronze 3204": (5800, 85), "silver 4108": (9500, 85),
+    "silver 4110": (10500, 85), "silver 4112": (5500, 85), "silver 4114": (12500, 85), "silver 4116": (14000, 85),
+    "silver 4208": (11000, 85), "silver 4210": (13500, 85), "silver 4214": (16000, 85), "silver 4215": (12500, 85),
+    "silver 4216": (20000, 100), "gold 5115": (13000, 85), "gold 5118": (15500, 105), "gold 5120": (17500, 105),
+    "gold 5218": (22000, 125), "gold 5220": (23500, 125), "gold 6126": (18500, 125), "gold 6130": (20500, 125),
+    "gold 6132": (20500, 140), "gold 6134": (13000, 130), "gold 6138": (24000, 125), "gold 6140": (23500, 140),
+    "gold 6148": (26000, 150), "gold 6152": (27000, 140), "gold 6154": (27000, 200), "gold 6230": (27000, 125),
+    "gold 6242": (27000, 150), "gold 6248": (30500, 150), "gold 6252": (31500, 150), "platinum 8160": (30000, 150),
+    # Intel Xeon D / older
+    "d-1518": (4500, 35), "d-1521": (4800, 45), "d-1528": (6500, 35), "d-1537": (7800, 35), "d-1540": (9500, 45),
+    "d-1541": (9600, 45), "x5650": (6000, 95), "x5670": (6300, 95), "x5675": (6600, 95), "x5680": (6900, 130),
+    "x5690": (7100, 130), "l5640": (5500, 60), "e5645": (5200, 80), "e5649": (5300, 80),
+    # AMD EPYC
+    "epyc 3251": (13000, 55), "epyc 7251": (12000, 120), "epyc 7281": (19000, 155), "epyc 7301": (21000, 155),
+    "epyc 7351": (22000, 155), "epyc 7401": (27000, 155), "epyc 7551": (31000, 180), "epyc 7601": (34000, 180),
+    "epyc 7302": (28000, 155), "epyc 7402": (38000, 180), "epyc 7452": (45000, 155), "epyc 7502": (48000, 180),
+    "epyc 7542": (52000, 225), "epyc 7702": (62000, 200),
 }
+
+# Xeon E3/E5/E7 with version: "E5-2680 v4", "e5-2680v4", "E-5 2630 v3", "E5-2673-V4"
+_XEON_E = re.compile(r"\be\s*-?\s*([357])\s*-?\s*(\d{4})\s*(l|w)?(?:\s*-?\s*v\s*([1-6]))?\b")
+_XEON_E2 = re.compile(r"\be\s*-\s*(2[1-4]\d{2}g?)\b|\bxeon\s*e\s*-?\s*(2[1-4]\d{2}g?)\b")
+_XEON_W = re.compile(r"\bw\s*-\s*(2[12]\d{2})\b|\bxeon\s*w\s*-?\s*(2[12]\d{2})\b")
+_XEON_SP = re.compile(r"\b(bronze|silver|gold|platinum)\s*([3-8]\d{3})[a-z]?\b")
+_XEON_D = re.compile(r"\b(d\s*-\s*1[5-7]\d{2}|[xle]5[56]\d{2})\b")
+_EPYC = re.compile(r"\bepyc\s*(\d{4})p?\b")
+_CORES = re.compile(r"\b(\d{1,2})\s*[- ]?(?:cores?|kerne?|c[oœ]urs|core|nucleos|rdzeni)\b")
+_DUAL = re.compile(
+    r"\b(?:2\s*[x×]\s*(?:intel\s*)?(?:xeon|e\s*-?\s*5|epyc|opteron|cpus?|prozessoren|processeurs?)|"
+    r"(?:dual|double|doppi[ao]|doble|dupla)[\s-]*(?:xeon|cpus?|socket|sockel|processor|prozessor|processeur|processore|"
+    r"procesador|e5|epyc)|bi[\s-]?(?:processeur|xeon)|"
+    r"zwei\s*(?:cpus?|prozessoren))"
+)
+_E5_FALLBACK = {"1": 7500, "2": 9500, "3": 13000, "4": 16000}  # unlisted E5-26xx by version
+_E3_FALLBACK = {"1": 5500, "2": 6200, "3": 7000, "4": 7200, "5": 7700, "6": 8100}
 
 _INTEL_CORE = re.compile(r"\bi([3579])[\s-]?(\d{4,5})([a-z]\d?|[a-z]{1,2})?\b")
 _INTEL_LOW = re.compile(r"\b((?:n|j)\d{3,4}|g\d{4}t?)\b")
@@ -110,6 +188,9 @@ def lookup(text: str, overrides: dict[str, tuple[int, int]] | None = None) -> Cp
     """Find the CPU mentioned in a listing and return its rough performance data."""
     t = text.lower().replace("®", "").replace("™", "")
     table = {**KNOWN, **{k.lower(): tuple(v) for k, v in (overrides or {}).items()}}
+
+    if server := _server_cpu(t, table):
+        return server
 
     if m := _INTEL_CORE.search(t):
         tier, number, suffix = m.group(1), m.group(2), (m.group(3) or "")
@@ -144,6 +225,47 @@ def lookup(text: str, overrides: dict[str, tuple[int, int]] | None = None) -> Cp
         if 2 <= gen <= 14:
             return estimate_intel(m.group(1), gen, "t", f"i{m.group(1)} gen{gen}")
     return None
+
+
+def _server_cpu(t: str, table: dict) -> CpuInfo | None:
+    xeon = "xeon" in t
+    if m := _XEON_E.search(t):
+        family, number, low, version = m.group(1), m.group(2), m.group(3) or "", m.group(4) or "1"
+        model = f"e{family}-{number}{low}" + (f" v{version}" if version != "1" else "")
+        if model in table:
+            return CpuInfo(model, *table[model])
+        if xeon or version != "1":
+            if family == "3":
+                return CpuInfo(model, _E3_FALLBACK.get(version, 7000), 80, estimated=True)
+            return CpuInfo(model, _E5_FALLBACK.get(version, 9000), 105, estimated=True)
+    for rx, prefix in ((_XEON_E2, "e-"), (_XEON_W, "w-")):
+        if m := rx.search(t):
+            model = prefix + (m.group(1) or m.group(2))
+            if model in table:
+                return CpuInfo(model, *table[model])
+            return CpuInfo(model, 12000, 80 if prefix == "e-" else 140, estimated=True)
+    if xeon and (m := _XEON_SP.search(t)):
+        model = f"{m.group(1)} {m.group(2)}"
+        if model in table:
+            return CpuInfo(model, *table[model])
+        return CpuInfo(model, 15000, 125, estimated=True)
+    if m := _XEON_D.search(t):
+        model = re.sub(r"\s", "", m.group(1))
+        if model in table:
+            return CpuInfo(model, *table[model])
+    if m := _EPYC.search(t):
+        model = f"epyc {m.group(1)}"
+        return CpuInfo(model, *table[model]) if model in table else CpuInfo(model, 25000, 155, estimated=True)
+    if xeon:
+        # "Xeon 10 Core": no model, so judge it by its cores.
+        cores = int(m.group(1)) if (m := _CORES.search(t)) else 0
+        return CpuInfo(f"xeon {cores}c" if cores else "xeon", max(4000, cores * 1100) if cores else 6000, 95, estimated=True)
+    return None
+
+
+def cpu_count(text: str) -> int:
+    """2 for dual-socket machines ("2x Xeon E5-2680 v4", "Dual CPU"), else 1."""
+    return 2 if _DUAL.search(text.lower()) else 1
 
 
 def estimate_intel(tier: str, gen: int, suffix: str, model: str) -> CpuInfo:

@@ -111,6 +111,26 @@ def test_flags():
     ("Mini pc idéal retrogaming i7 11 ème gen", False),
     ("Dell OptiPlex 7040 + Lecteur DVD", False),
     ("PC Intel i5-6500 Windows 11", False),
+    ("Supermicro scheda madre RAM dual xeon", True),
+    ("Processeur serveur Xeon E5-2673-V4 - 20 cores 40 threads - pour socket LGA2011-3", True),
+    ("2x Intel Xeon Gold 6138 - 20 Core / 40 Threads", True),
+    ("Dell RAID Controller (PERC) H710", True),
+    ("Dell PowerEdge R520 – 2×Xeon – ohne RAM/HDD", False),
+    ("Dell OptiPlex 7050 i5 mit Netzteil", False),
+    ("Intel Xeon 16 GB RAM", False),
+    ("i5-8500T 8GB", False),
+    ("CPU Dell AMD Epyc 7402 serveur AMD 24 Cœur 48thread SP3", True),
+    ("Intel Xeon E5-2660 + 64Go RAM", True),
+    ("Kit Serveur X99 Intel Xeon 18 cores 36 threads x 3.0ghz - 64Go RAM", True),
+    ("Carte mere serveur Supermicro X9SBAA-F", True),
+    ("Kit Serveur/Workstation X99 Intel Xeon 12 cores 24 threads - 64Go RAM", True),
+    ("Gaming PC X99 Xeon E5-2680 v4 32GB SSD", False),
+    ("Bundle Xeon X5690 + Gigabyte X58A UD7 + 48 GB ddr3", True),
+    ("19\" Server mit Gigabyte MJ11 Mainboard & Amd Epyc / 40GB Ram", False),
+    ("Bayern Kit 2008/2009", False),
+    ("Kit GAMER Turbo Unlock - 64Go RAM - cpu Intel Xeon 10 cores 20 threads", True),
+    ("Bundle server HP ProLiant DL380p Gen8 - doppia cpu Intel Xeon + 128gb ram DDR3 ECC", False),
+    ("Dell PowerEdge R320 Server Xeon E5-2470 v2 10-Core 96GB DDR3 ECC RAM", False),
 ])
 def test_loose_cpu(title, cpu_only):
     assert parse_specs(title, title=title).cpu_only is cpu_only
@@ -120,3 +140,37 @@ def test_loose_cpu(title, cpu_only):
 
 def test_comma_decimal_size_does_not_crash():
     parse_specs("Mini PC i5-8500T 8500,8 GB")  # used to raise ValueError
+
+
+@pytest.mark.parametrize("text, model, cpus", [
+    ("Dell PowerEdge R320 Server Xeon E5-2470 v2 10-Core 96GB DDR3 ECC", "e5-2470 v2", 1),
+    ("Dell R620 2x E5-2650 v2 64GB", "e5-2650 v2", 2),
+    ("2x Xeon E-5 2630 v3", "e5-2630 v3", 2),
+    ("HP ML30 Gen10 Xeon E-2224 16GB", "e-2224", 1),
+    ("Dell Precision 5820 W-2135 32GB", "w-2135", 1),
+    ("Supermicro EPYC 7302P 128GB", "epyc 7302", 1),
+    ("Dual Xeon Gold 6148 workstation", "gold 6148", 2),
+    ("HP ProLiant DL380p Gen8 - doppia cpu Intel Xeon E5-2670 v2 + 128gb ram", "e5-2670 v2", 2),
+    ("PC Gaming Desktop / Studio - Xeon 10 Core, RX 580", "xeon 10c", 1),
+    ("Gaming PC Ryzen 5 5600X RTX 3060", "ryzen 5 5600x", 1),
+    ("2x8GB RAM i5-6500", "i5-6500", 1),  # 2x8GB is RAM, not two CPUs
+])
+def test_server_and_desktop_cpus(text, model, cpus):
+    specs = parse_specs(text, title=text)
+    assert specs.cpu.model == model and specs.cpus == cpus
+
+
+def test_server_form_factor():
+    assert parse_specs("Dell PowerEdge T310 Tower Server", title="Dell PowerEdge T310 Tower Server").form_factor == "server"
+    assert parse_specs("HP 1U rack server").form_factor == "server"
+    assert parse_specs("Mini PC Server N100").form_factor == "tiny"  # a home server, not a rack box
+
+
+@pytest.mark.parametrize("text, ram, storage", [
+    ("Ryzen 5 5600G 16GB", 16, None),
+    ("Intel Xeon E-2176G Server Homelab", None, None),
+    ("Mini PC i5 16g ram 512g ssd", 16, 512),
+])
+def test_model_suffix_g_is_not_a_size(text, ram, storage):
+    specs = parse_specs(text)
+    assert (specs.ram_gb, specs.storage_gb) == (ram, storage)

@@ -60,3 +60,21 @@ def test_rules_scorer():
 def test_price_scorer_is_cheapest_first():
     s = build_scorer({"type": "price"})
     assert s.score(L("x", 10)).value > s.score(L("x", 20)).value
+
+
+
+def test_dual_cpu_server_costs_more_to_run():
+    from vinted_scraper.models import Listing
+    from vinted_scraper.scoring import build_scorer
+
+    scorer = build_scorer({"type": "computer"})
+
+    def score(title):
+        return scorer.score(Listing(id=1, title=title, price=200, currency="EUR", url=""))
+
+    single = score("Dell PowerEdge R620 Xeon E5-2650 v2 64GB")
+    dual = score("Dell PowerEdge R620 2x Xeon E5-2650 v2 64GB")
+    tower = score("Workstation Xeon E5-2650 v2 64GB")
+    assert dual.points > single.points and dual.cost > single.cost
+    assert single.cost > tower.cost  # server: 35 W extra idle draw
+    assert "2x e5-2650 v2" in dual.summary

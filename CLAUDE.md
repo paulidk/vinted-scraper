@@ -45,7 +45,7 @@ nothing. Start there when scraping breaks.
 |---|---|
 | `vinted_scraper/client.py` | curl_cffi HTTP client, Cloudflare handling, catalog-page and item-page parsing |
 | `vinted_scraper/models.py` | `Listing` built from a normalized item dict |
-| `vinted_scraper/scoring/cpu_db.py` | ~165 CPUs → approx. PassMark + TDP, plus estimation for unknown models |
+| `vinted_scraper/scoring/cpu_db.py` | ~380 CPUs (mini PC, desktop, Xeon, EPYC) → approx. PassMark + TDP, estimation for unknown models |
 | `vinted_scraper/scoring/specs.py` | free-text → CPU, RAM, storage, form factor, defect/lot/barebone flags |
 | `vinted_scraper/scoring/computer.py` | mini PC value scorer: points vs. price + fees + shipping + electricity |
 | `vinted_scraper/scoring/rules.py` | generic regex-points scorer; `type: price` = no rules = cheapest first |
@@ -98,9 +98,20 @@ Known limitation: when several sizes each sit next to a RAM keyword, the largest
 "8GB RAM, upgradable to 32GB RAM" counts as 32 GB. Fixing it means recognising "upgradable",
 "max", "bis zu", ... near a size.
 
-`cpu_only` flags loose processors/boards (socket, sSpec code or "Prozessor" in the title, or a title
-that is only a CPU model) unless the title names a machine, brand or RAM/storage size. They showed
-up once paging went deeper and topped the ranking because RAM is assumed. Cases: `test_loose_cpu`.
+`cpu_only` flags parts rather than machines: boards/controllers (`PART`) unless the title names a
+machine noun or model line; processors (socket, sSpec code, "Prozessor" first, or a title that is
+only a CPU model) unless it names a machine, model line, maker or RAM/storage size. Makers alone
+don't count for boards ("Supermicro scheda madre"). Cases: `test_loose_cpu`.
+
+Servers: `cpu_db._server_cpu` runs before the Core/Ryzen patterns (Xeon E3/E5 with version,
+E-2xxx, W-2xxx, Scalable metal names, D, X56xx, EPYC; bare "Xeon 10 Core" is estimated by cores).
+`cpu_count` → `Specs.cpus` = 2 for "2x Xeon"/"Dual CPU" (not "2x8GB"). Form factor `server`
+(rack, 1U/2U, PowerEdge, ProLiant, Primergy, Supermicro, ...) is checked first and adds
+`extra_watts` idle draw. Plain "server" doesn't count: "Mini PC Server" is a home server.
+
+Vinted's text search is fuzzy and ignores the text almost completely with a category filter, so
+the user's `desktops` search is the whole category 3581 (newest first) and `servers` uses
+`params: {order: relevance}`. Category ids are in the catalog page payload (`catalogIds`).
 
 When you change the parser, add the listing text as a case to `test_ram_and_storage` in
 `tests/test_specs.py`. That table is the regression suite. CPU scores in `cpu_db.py` are
