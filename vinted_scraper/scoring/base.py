@@ -39,4 +39,12 @@ def build_scorer(config: dict | None) -> Scorer:
         from .memory import MemoryScorer
 
         return MemoryScorer(**config)
-    raise ValueError(f"unknown scorer type {kind!r} (expected 'computer', 'ram' or 'rules')")
+    if kind in ("drive", "drives", "hdd"):
+        from .drives import DriveScorer
+
+        return DriveScorer(**config)
+    if kind == "nas":
+        from .nas import NasScorer
+
+        return NasScorer(**config)
+    raise ValueError(f"unknown scorer type {kind!r} (expected 'computer', 'ram', 'drive', 'nas' or 'rules')")

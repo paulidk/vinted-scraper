@@ -187,6 +187,8 @@ async function api(path, body) {
 const SCORER_DEFAULTS = {
   computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only", "offsite"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
   ram: () => ({ type: "ram", ddr: 4, module: "sodimm", min_gb: 16, max_sticks: 2, reject: ["defect", "offsite", "ecc", "machine"], shipping_estimate: 5 }),
+  drive: () => ({ type: "drive", kind: "hdd", form: "3.5", min_tb: 4, reject: ["defect", "offsite", "sas", "device"], kwh_price: 0.32, years: 2, shipping_estimate: 6 }),
+  nas: () => ({ type: "nas", min_bays: 2, min_year: 2015, require_model: true, reject: ["defect", "offsite", "accessory"], shipping_estimate: 10 }),
   rules: () => ({ type: "rules", base: 10, rules: [] }),
   price: () => ({ type: "price" }),
 };
@@ -209,6 +211,12 @@ const TEMPLATES = {
   "SO-DIMM RAM (DDR4)": () => ({ name: "sodimm-ram", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true }, interval_minutes: 60,
     queries: ["ddr4 sodimm", "so-dimm ddr4", "ddr4 laptop ram", "notebook arbeitsspeicher ddr4", "16gb ddr4 sodimm", "32gb ddr4 sodimm", "2x16gb ddr4 sodimm"],
     pages: 2, min_price: 5, max_price: 150, fetch_details: 10, notify: { min_value: 25, podium: 3, price_drop: true }, scorer: SCORER_DEFAULTS.ram() }),
+  "Hard drives (3.5\" HDD)": () => ({ name: "hdd", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true }, interval_minutes: 60,
+    queries: ["wd red", "seagate ironwolf", "toshiba n300", "seagate exos", "wd ultrastar", "hgst", "nas festplatte", "festplatte 3,5", "hdd 4tb", "hdd 8tb", "hdd 12tb", "wd elements desktop", "wd my book"],
+    pages: 2, min_price: 15, max_price: 400, fetch_details: 5, notify: { min_value: 3, podium: 3, price_drop: true }, scorer: SCORER_DEFAULTS.drive() }),
+  "NAS": () => ({ name: "nas", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true }, interval_minutes: 60,
+    queries: ["synology", "diskstation", "qnap", "asustor", "terramaster", "ugreen nas", "nas 2 bay", "nas 4 bay", "nas server"],
+    pages: 2, min_price: 30, max_price: 600, fetch_details: 10, notify: { min_value: 3, podium: 3, price_drop: true }, scorer: SCORER_DEFAULTS.nas() }),
   "Any item (rules)": () => ({ name: "", queries: [], notify: { min_value: 0, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.rules() }),
   "Cheapest first": () => ({ name: "", queries: [], notify: { top: 3, price_drop: true }, scorer: SCORER_DEFAULTS.price() }),
 };
@@ -282,6 +290,62 @@ function ramScorer(sc) {
   ];
 }
 
+function rejectBoxes(sc, dflt, items) {
+  const reject = new Set(sc.reject ?? dflt);
+  return items.map(([flag, label]) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
+    onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label));
+}
+
+function driveScorer(sc) {
+  return [
+    h("h3", {}, "What to look for"),
+    h("div", { class: "grid" },
+      field(sc, "kind", "Drive type", { type: "select", default: "hdd", options: [["hdd", "HDD"], ["ssd", "SSD"], ["any", "Any"]] }),
+      field(sc, "form", "Size", { type: "select", default: "any", options: [["3.5", '3.5" (NAS, desktop)'], ["2.5", '2.5" (laptop)'], ["any", "Any"]] }),
+      field(sc, "min_tb", "Min TB per drive", { type: "number", placeholder: "0" }),
+      field(sc, "max_hours", "Max power-on hours", { type: "number", placeholder: "", hint: "only when the listing says; 8760 = one year 24/7" }),
+      field(sc, "tb_cap", "TB counted up to", { type: "number", placeholder: "" }),
+      field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
+    h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
+      ...rejectBoxes(sc, ["defect", "offsite", "sas", "device"], [["defect", "broken / bad SMART"], ["offsite", "asking to pay outside Vinted"],
+        ["sas", "SAS (needs a controller)"], ["device", "a whole NAS or PC"], ["external", "external USB drives"]])),
+    h("h3", {}, "Running costs"),
+    h("div", { class: "grid" },
+      field(sc, "kwh_price", "Electricity per kWh", { type: "number", placeholder: "0.30" }),
+      field(sc, "years", "Years of use counted", { type: "number", placeholder: "2" }),
+      field(sc, "hours_per_day", "Hours on per day", { type: "number", placeholder: "24" }),
+      field(obj(sc, "watts"), "3.5", 'Idle watts per 3.5" drive', { type: "number", placeholder: "5" }),
+      field(obj(sc, "watts"), "2.5", 'Idle watts per 2.5" drive', { type: "number", placeholder: "1.5" })),
+    h("p", { class: "muted" }, "Points are TB, so the value is TB per 100 € of price, shipping and electricity."),
+  ];
+}
+
+function nasScorer(sc) {
+  const w = obj(sc, "weights");
+  return [
+    h("h3", {}, "Requirements"),
+    h("div", { class: "grid" },
+      field(sc, "min_bays", "Min bays", { type: "number", placeholder: "2" }),
+      field(sc, "min_year", "Oldest model year", { type: "number", placeholder: "", hint: "Synology DS918+ = 2018; older ones lose software updates" }),
+      field(sc, "no_psu_penalty", "Extra cost if no power supply", { type: "number", placeholder: "20" }),
+      field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
+    h("div", { class: "row", style: "margin-top:10px" }, check(sc, "require_x86", "Only x86 models (Docker, Plex, VMs)", false),
+      check(sc, "require_model", "Only models it knows (Synology, QNAP, Asustor, TerraMaster, Ugreen, WD)", false),
+      h("span", { class: "muted" }, "Skip listings that are:"),
+      ...rejectBoxes(sc, ["defect", "offsite", "accessory"], [["defect", "broken"], ["offsite", "asking to pay outside Vinted"], ["accessory", "routers, RAM, fans, expansion units"]])),
+    h("h3", {}, "Weights"),
+    h("div", { class: "grid" },
+      field(w, "bay", "Points per bay", { type: "number", placeholder: "3" }),
+      field(w, "bay_cap", "Bays counted up to", { type: "number", placeholder: "8" }),
+      field(w, "x86", "Bonus for x86", { type: "number", placeholder: "4" }),
+      field(w, "per_year", "Points per model year", { type: "number", placeholder: "0.5" }),
+      field(w, "base_year", "…counted from", { type: "number", placeholder: "2015" }),
+      field(w, "tb", "Points per TB of included drives", { type: "number", placeholder: "1" }),
+      field(w, "ram", "Points per GB RAM", { type: "number", placeholder: "0.25" }),
+      field(w, "ram_cap", "RAM counted up to (GB)", { type: "number", placeholder: "16" })),
+  ];
+}
+
 function rulesScorer(sc) {
   sc.rules = sc.rules || [];
   const body = h("tbody");
@@ -346,7 +410,7 @@ function searchCard(s, i, open) {
   const drawScorer = () => {
     const type = s.scorer.type || "rules";
     tag.textContent = type;
-    scorerBox.replaceChildren(...(type === "computer" ? computerScorer(s.scorer) : type === "ram" ? ramScorer(s.scorer) : type === "price"
+    scorerBox.replaceChildren(...(type === "computer" ? computerScorer(s.scorer) : type === "ram" ? ramScorer(s.scorer) : type === "drive" ? driveScorer(s.scorer) : type === "nas" ? nasScorer(s.scorer) : type === "price"
       ? [h("div", { class: "grid" }, field(s.scorer, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
          h("p", { class: "muted" }, "Ranks listings cheapest first.")]
       : rulesScorer(s.scorer)), ...scoreTester(s));
@@ -397,7 +461,7 @@ function searchCard(s, i, open) {
       h("div", { class: "row" }, check(notify, "price_drop", "Alert again on price drop", true))),
     h("h3", {}, "Scoring"),
     h("div", { class: "grid" }, field(s.scorer, "type", "Scorer", { type: "select", default: "rules",
-      options: [["computer", "Computer / mini PC value"], ["ram", "RAM (GB per 100 €)"], ["rules", "Rules (any item)"], ["price", "Cheapest first"]],
+      options: [["computer", "Computer / mini PC value"], ["ram", "RAM (GB per 100 €)"], ["drive", "Hard drives (TB per 100 €)"], ["nas", "NAS (bays, model, drives)"], ["rules", "Rules (any item)"], ["price", "Cheapest first"]],
       onchange: () => { if (confirm("Reset the scorer settings for the new type?")) s.scorer = SCORER_DEFAULTS[s.scorer.type](); render(i); } })),
     scorerBox);
 }

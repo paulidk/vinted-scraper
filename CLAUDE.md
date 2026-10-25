@@ -53,6 +53,8 @@ nothing. Start there when scraping breaks.
 | `vinted_scraper/scoring/specs.py` | free-text → CPU, GPU, RAM, storage, form factor, defect/lot/barebone/part/offsite flags |
 | `vinted_scraper/scoring/computer.py` | mini PC value scorer: points vs. price + fees + shipping + electricity |
 | `vinted_scraper/scoring/memory.py` | `type: ram`: RAM sticks/kits → GB, DDR gen, SO-DIMM/DIMM, MHz; points = GB |
+| `vinted_scraper/scoring/drives.py` | `type: drive`: drive sets → TB, HDD/SSD, 3.5"/2.5", hours; cost adds idle power per drive |
+| `vinted_scraper/scoring/nas.py` | `type: nas`: model → bays, x86, year (Synology/QNAP/Asustor/...); included TB |
 | `vinted_scraper/scoring/rules.py` | generic regex-points scorer; `type: price` = no rules = cheapest first |
 | `vinted_scraper/runner.py` | fetch → filter → score (+ optional description fetch) → store → notify |
 | `vinted_scraper/ranking.py` | rescoring stored listings with the current config; podium diff → `Podium` message |
@@ -163,6 +165,11 @@ Vinted's text search is fuzzy and ignores the text almost completely with a cate
 the user's `desktops` search is the whole category 3581 (newest first) and `servers` uses
 `params: {order: relevance}`. Category ids are in the catalog page payload (`catalogIds`).
 
+Drives (`drives.py`): sizes need TB/To/GB/Go (no bare "T": "DMA Kingdom 75T"); GB below 100 is
+ignored ("6 GB/s", "8GB RAM"); several sizes without a total relation = `mixed`, rejected. NAS
+(`nas.py`): Synology only with its name or a suffix ("DS437" is a Shuttle PC); "getestet mit 2x 8TB"
+means no drives included. Cases: `tests/test_drives.py`, `tests/test_nas.py`.
+
 RAM listings (`memory.py`) are parsed from the title only for the size (descriptions mention upgrade
 limits and other machines); generation and module type fall back to the description, and a
 `"... unknown"` reject makes the runner fetch it. Cases: `tests/test_memory.py`.
@@ -179,7 +186,7 @@ due, `run_forever` sleeps until the next search is due or quiet hours end. `once
 timer every 10 min) allows up to 5 min slack so a 20-min search doesn't slip to 30. The user runs
 mini-pc every 20 min, desktops 30, servers 120, quiet 1–7. `enabled: false` pauses a search
 (`Runner.active`); `once <name>` still runs it. Since 2026-10-25 (PC bought) only `sodimm-ram` (60 min)
-is enabled; the three PC searches are paused.
+is enabled, plus `hdd` and `nas` (60 min each); the three PC searches are paused.
 
 ## Runner behaviour worth keeping
 

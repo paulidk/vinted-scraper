@@ -179,6 +179,54 @@ searches:
   #     reject: [defect, offsite, ecc, machine]   # machine = a whole laptop/PC that lists its RAM
   #     shipping_estimate: 5
 
+  # ------------------------------------------- hard drives: TB per 100 €
+  # Cost includes each drive's idle power over `years` (~5 W per 3.5" drive, 24/7), so one big
+  # drive beats two small ones at the same price. Reads sets ("4 Stück 2TB", "3x 4TB (12TB)"),
+  # per-drive prices ("(4 verfügbar)") and power-on hours.
+  # - name: hdd
+  #   interval_minutes: 60
+  #   sites: [vinted, kleinanzeigen]
+  #   queries: [wd red, seagate ironwolf, toshiba n300, seagate exos, wd ultrastar, hgst, nas festplatte,
+  #             festplatte 3,5, hdd 4tb, hdd 8tb, hdd 12tb, wd elements desktop, wd my book]
+  #   kleinanzeigen: {shipping: true}
+  #   pages: 2
+  #   min_price: 15
+  #   max_price: 400
+  #   notify: {min_value: 3, podium: 3, price_drop: true}   # 3 = 3 TB per 100 € incl. 2 years of power
+  #   scorer:
+  #     type: drive
+  #     kind: hdd            # hdd, ssd or any
+  #     form: "3.5"          # "3.5", "2.5" or any; listings that don't say are kept
+  #     min_tb: 4            # per drive
+  #     # max_hours: 35000   # power-on hours, when the listing says
+  #     reject: [defect, offsite, sas, device]   # + external to skip USB drives (shuckable, often cheaper)
+  #     kwh_price: 0.32
+  #     years: 2
+  #     shipping_estimate: 6
+  #
+  # ------------------------------------------- NAS
+  # Bays, x86 vs. ARM and model year come from the model name (Synology DS/RS, QNAP TS, Asustor,
+  # TerraMaster, Ugreen, WD My Cloud); included drives count per TB, "ohne HDD" = none.
+  # - name: nas
+  #   interval_minutes: 60
+  #   sites: [vinted, kleinanzeigen]
+  #   queries: [synology, diskstation, qnap, asustor, terramaster, ugreen nas, nas 2 bay, nas 4 bay, nas server]
+  #   kleinanzeigen: {shipping: true}
+  #   pages: 2
+  #   min_price: 30
+  #   max_price: 600
+  #   fetch_details: 10
+  #   notify: {min_value: 3, podium: 3, price_drop: true}
+  #   scorer:
+  #     type: nas
+  #     min_bays: 2
+  #     min_year: 2015       # older models no longer get DSM / QTS updates
+  #     require_model: true  # skip boxes it can't identify (old Netgear, Thecus, Buffalo, no-name cases)
+  #     # require_x86: true  # only Synology "+", QNAP x39 and up, ... (Docker, Plex, VMs)
+  #     weights: {bay: 3, x86: 4, per_year: 0.5, tb: 1, ram: 0.25}
+  #     reject: [defect, offsite, accessory]   # accessory = routers, RAM, fans, expansion units
+  #     shipping_estimate: 10
+
   # ------------------------------------------- any other search: rules scorer
   # - name: lego-technic
   #   query: lego technic

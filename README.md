@@ -69,6 +69,23 @@ than `max_sticks`, server ECC/registered sticks, and whole laptops that just lis
 A title that doesn't say DDR4 or SO-DIMM gets its description fetched (within `fetch_details`).
 See the `sodimm-ram` example in `config.example.yaml`.
 
+## Hard drives and NAS
+
+`type: drive` ranks drives by **TB per 100 €**. The cost includes each drive's idle power over
+`years` (5 W per 3.5" drive by default), so one 8 TB drive beats two 4 TB drives at the same price
+and a 1 TB drive for 10 € isn't a bargain. It reads sets ("4 Stück 2TB", "3x 4TB (12TB)", "Coppia
+dischi"), per-drive prices ("(4 verfügbar)"), power-on hours and bad SMART values, and skips SSDs,
+2.5" drives, SAS drives and whole NAS boxes unless you allow them.
+
+`type: nas` reads the model: Synology "DS918+" is a 4-bay 2018 model with an x86 CPU ("+"; "j",
+"play" and no suffix are ARM), QNAP "TS-453D" a 4-bay x86 (x39 generation and up), plus Asustor,
+TerraMaster, Ugreen and WD My Cloud. "4-Bay"/"4 baies" in the text wins. Points come from bays, x86,
+model year, RAM and included drives (per TB; "ohne HDD" = none). `min_year` skips models that no
+longer get updates; `require_model` skips boxes it can't identify (old Netgear, Thecus, no-name
+cases, whose age it can't tell); `require_x86` keeps only the ones that run Docker and Plex well. Routers, RAM,
+fans and expansion units from the same brands are skipped. Examples: `hdd` and `nas` in
+`config.example.yaml`.
+
 ## Kleinanzeigen
 
 Any search can run on both sites: with `sites: [vinted, kleinanzeigen]` every search term runs on
