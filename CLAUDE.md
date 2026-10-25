@@ -193,13 +193,15 @@ mini-pc every 20 min, desktops 30, servers 120, quiet 1–7.
   rebuilt `Listing` matches a fresh one. Older rows lack `total_price`, so the buyer fee is estimated.
 - **Podium mode** (`notify.podium: N`, the user runs it with 3): replaces per-deal alerts. After
   scoring, the best N (`min_value` applies) are compared with the last podium saved in the `podium`
-  table, and a `Podium` is sent via `Notifier.send_podium` only when the ids/order differ or (with
+  table, and a `Podium` is sent via `Notifier.send_podium` only when the ids/order differ, a member
+  got dearer (always: sellers on Kleinanzeigen often fix the price minutes after posting), or (with
   `price_drop`) a member got cheaper. Members missing from this run's results (or known only from a
   snippet) are checked with `client.item_page`. On Vinted a sold/reserved listing has **no JSON-LD
   at all**, but the RSC payload carries a `buyer_item_status` block (`"title":"Verkauft"`) and
   `"can_buy":false`; an available one has `"can_buy":true` (checked 2026-10-25). A 404 means
-  deleted. Sold ones get `gone` set and are skipped until they show up in results again; pages
-  that can't be classified are kept and logged as a warning. A blocked run leaves the podium unchanged.
+  deleted. `ItemPage.price` (Vinted JSON-LD `offers.price`, Kleinanzeigen `#viewad-price`) updates
+  the stored price; `Store.set_price` scales `total_price` with it. Sold ones get `gone` set and
+  are skipped until they show up in results again; pages that can't be classified are kept and logged as a warning. A blocked run leaves the podium unchanged.
 
 ## Web UI security (`webui.py`)
 

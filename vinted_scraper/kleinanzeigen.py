@@ -31,6 +31,7 @@ ID_OFFSET = 10**15
 _ISLAND = re.compile(r'<astro-island[^>]*\sprops="([^"]*resultAds[^"]*)"')
 _PRICE = re.compile(r"(\d[\d.]*(?:,\d+)?)\s*€")
 _DESCRIPTION = re.compile(r'id="viewad-description-text"[^>]*>(.*?)</p>', re.S)
+_AD_PRICE = re.compile(r'id="viewad-price"[^>]*>([^<]*)<')
 _RESERVED = re.compile(r"pvap-reserved-title|<h1[^>]*>\s*(?:<[^>]+>\s*)*Reserviert\b", re.I)
 
 
@@ -100,7 +101,9 @@ def parse_listing_page(html: str) -> ItemPage:
     if m:
         text = re.sub(r"<br\s*/?>", "\n", m.group(1))
         description = html_lib.unescape(re.sub(r"<[^>]+>", "", text)).strip()
-    return ItemPage(description=description, available=not _RESERVED.search(html))
+    price = _AD_PRICE.search(html)
+    return ItemPage(description=description, available=not _RESERVED.search(html),
+                    price=parse_price(price.group(1)) if price else None)
 
 
 def search_path(params: dict[str, Any], page: int = 1) -> str:

@@ -151,6 +151,14 @@ class Store:
     def set_description(self, search: str, item_id: int, description: str) -> None:
         self.db.execute("UPDATE items SET description=?, partial=0 WHERE search=? AND id=?", (description, search, item_id))
 
+    def set_price(self, search: str, item_id: int, price: float) -> None:
+        """The listing page shows a new price. Vinted's buyer fee in `total_price` scales with it."""
+        self.db.execute(
+            "UPDATE items SET total_price=CASE WHEN price > 0 AND total_price IS NOT NULL "
+            "THEN round(total_price * ? / price, 2) END, price=? WHERE search=? AND id=?",
+            (price, price, search, item_id),
+        )
+
     def update_score(self, search: str, item_id: int, score) -> None:
         self.db.execute(
             "UPDATE items SET cost=?, points=?, value=?, summary=?, reject=? WHERE search=? AND id=?",

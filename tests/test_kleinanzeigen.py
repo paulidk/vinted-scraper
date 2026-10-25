@@ -71,6 +71,9 @@ def test_listing_page():
     page = '<h1 id="viewad-title">Mini PC</h1><p id="viewad-description-text" class="x">i5-8500T<br/>16 GB &amp; 256 GB</p>'
     assert parse_listing_page(page).description == "i5-8500T\n16 GB & 256 GB"
     assert parse_listing_page(page).available is True
+    priced = '<h2 class="boxedarticle--price" id="viewad-price">\n   150 € VB</h2>'
+    assert parse_listing_page(priced).price == 150
+    assert parse_listing_page(page).price is None
     reserved = '<h1 id="viewad-title"><span class="pvap-reserved-title">Reserviert • </span>Mini PC</h1>'
     assert parse_listing_page(reserved).available is False
 

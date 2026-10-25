@@ -101,6 +101,32 @@ def test_price_drop_on_the_podium_alerts(tmp_path, catalog_items):
     assert rec3.podiums == []
 
 
+def test_raised_price_on_the_podium_alerts_even_without_price_drop(tmp_path, catalog_items):
+    runner, _, rec = podium_runner(tmp_path, catalog_items, price_drop=False)
+    runner.run_once()
+    dearer = copy.deepcopy(catalog_items)
+    dearer[1]["price"]["amount"] = "62.0"  # 60 -> 62: still second, but the last alert said 60
+    runner2, _, rec2 = podium_runner(tmp_path, dearer, price_drop=False)
+    runner2.run_once()
+    second = rec2.podiums[0].deals[1]
+    assert second.price == 62 and second.price_drop_from is None and second.change == "price up from 60"
+
+
+def test_availability_check_picks_up_a_new_price(tmp_path, catalog_items):
+    # Posted at 120, seen once, then the seller asks 150: the podium must not keep the old price.
+    runner, _, rec = podium_runner(tmp_path, catalog_items)
+    runner.run_once()
+    runner2, fake2, rec2 = podium_runner(tmp_path, catalog_items[1:])
+    client = runner2.client("www.vinted.de")
+    client.availability, client.prices = {101: True}, {101: 150.0}
+    runner2.run_once()
+    assert fake2["c"].page_calls == [101]
+    listing = runner2.store.listing("pcs", 101)
+    assert listing.price == 150 and listing.total_price == 158.38  # Vinted's buyer fee grows with it
+    sent = {d.url.rsplit("/", 1)[1]: d for d in rec2.podiums[0].deals}
+    assert sent["101"].price == 150 and "price up from 120" in sent["101"].change
+
+
 def test_blocked_run_keeps_the_last_podium(tmp_path, catalog_items):
     runner, _, rec = podium_runner(tmp_path, catalog_items)
     runner.run_once()

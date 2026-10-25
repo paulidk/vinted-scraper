@@ -143,6 +143,7 @@ def test_item_page_availability(availability, expected):
     offers = {"@type": "Offer", "price": 20} | ({"availability": availability} if availability else {})
     html = f'<script type="application/ld+json">{json.dumps({"@type": "Product", "description": "x", "offers": offers})}</script>'
     assert parse_item_page(html).available is expected
+    assert parse_item_page(html).price == 20
 
 
 def item_html(payload: str, ld: dict | None = None) -> str:

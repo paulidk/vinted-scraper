@@ -15,6 +15,7 @@ class FakeClient:
         self.searches = []
         self.detail_calls = []
         self.availability = {}  # item id -> True/False, missing = page doesn't say
+        self.prices = {}  # item id -> price shown on the listing page
         self.page_calls = []
 
     def search(self, params, pages=1, until=None):
@@ -27,7 +28,8 @@ class FakeClient:
 
     def item_page(self, item_id):
         self.page_calls.append(item_id)
-        return ItemPage(self.descriptions.get(item_id) or "", self.availability.get(item_id))
+        return ItemPage(self.descriptions.get(item_id) or "", self.availability.get(item_id),
+                        price=self.prices.get(item_id))
 
 
 def make_runner(tmp_path, items, descriptions=None, **search_kw):

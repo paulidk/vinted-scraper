@@ -193,7 +193,7 @@ class Runner:
                     continue
                 if page.available:
                     self.store.mark_seen(search.name, item_id)
-                    self._complete(search, scorer, item_id, page.description)
+                    self._complete(search, scorer, item_id, page.description, page.price)
                 else:
                     log.info("[%s] no longer for sale (%s): %s", search.name, page.status or "gone", urls[item_id])
                     self.store.mark_gone(search.name, item_id)
@@ -207,15 +207,24 @@ class Runner:
             self.store.mark_notified(search.name, r["id"], r["price"])
         return build_podium(search.name, rows, old) if rows else None
 
-    def _complete(self, search: SearchConfig, scorer, item_id: int, description: str) -> None:
-        """The availability check loaded the listing anyway: keep its full description and rescore,
-        so a podium place never rests on a search snippet ("Es ist ein i5 verbaut. Es...")."""
+    def _complete(self, search: SearchConfig, scorer, item_id: int, description: str,
+                  price: float | None = None) -> None:
+        """The availability check loaded the listing anyway: keep its full description and current
+        price and rescore, so a podium place never rests on a search snippet ("Es ist ein i5
+        verbaut. Es...") or on a price the seller has changed since."""
         listing = self.store.listing(search.name, item_id)
-        if not listing or len(description) <= len(listing.description):
+        if not listing:
             return
-        listing.description = description
-        self.store.set_description(search.name, item_id, description)
-        self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
+        longer = len(description) > len(listing.description)
+        repriced = price is not None and price > 0 and abs(price - listing.price) > 0.01
+        if longer:
+            self.store.set_description(search.name, item_id, description)
+        if repriced:
+            log.info("[%s] price changed %g -> %g: %s", search.name, listing.price, price, listing.url)
+            self.store.set_price(search.name, item_id, price)
+        if longer or repriced:
+            listing = self.store.listing(search.name, item_id)
+            self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
 
     def run_once(self, names: list[str] | None = None) -> list[Deal]:
         """Run every search (or the named ones) now, whatever its schedule."""

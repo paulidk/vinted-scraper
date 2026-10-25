@@ -54,7 +54,9 @@ def ranked(store: Store, search: SearchConfig, max_age_hours: float | None = Non
 def changed(old: list[Placed], new: list[Placed], price_drop: bool) -> bool:
     if [p.id for p in old] != [p.id for p in new]:
         return True
-    return price_drop and any(n.price < o.price - 0.01 for o, n in zip(old, new, strict=True))
+    # A raised price always counts: the last alert would otherwise keep showing the old price.
+    return any(n.price > o.price + 0.01 or (price_drop and n.price < o.price - 0.01)
+               for o, n in zip(old, new, strict=True))
 
 
 def build_podium(search: str, rows, old: list[Placed]) -> Podium:
@@ -73,6 +75,8 @@ def build_podium(search: str, rows, old: list[Placed]) -> Podium:
             if row["price"] < prev.price - 0.01:
                 drop_from = prev.price
                 change = ", ".join(filter(None, [change, "price drop"]))
+            elif row["price"] > prev.price + 0.01:
+                change = ", ".join(filter(None, [change, f"price up from {prev.price:g}"]))
         deals.append(Deal(search, row["title"], row["price"], row["currency"], row["value"], row["summary"],
                           row["url"], row["photo"] or "", price_drop_from=drop_from, rank=i + 1, change=change,
                           extra=row["extra"] or ""))

@@ -114,15 +114,17 @@ blocked for hours.
 
 With `notify: {podium: 3}` a search keeps a ranking of its best 3 listings and sends it as one
 message only when that ranking changes: a better listing enters, the order changes, a listing
-on it gets cheaper, or one is sold. Each place says what changed (`new`, `up from #3`,
-`price drop`) and the message lists what dropped out.
+on it gets cheaper or more expensive, or one is sold. Each place says what changed (`new`,
+`up from #3`, `price drop`, `price up from 120`) and the message lists what dropped out. A raised
+price is always sent, so an alert never keeps showing a price the seller has changed since.
 
 - **Every run re-scores the stored listings** with the current config, so a config change or a
   parser fix also applies to listings that were scraped earlier.
 - Searches are sorted newest first, so a good listing soon falls off the first result page while
   still being for sale. It stays ranked for `podium_hours` (default 72). A listing on the podium
   that wasn't in this run's results is checked on its item page, and dropped if it's sold or
-  deleted. That's at most 2 × `podium` extra page loads per run.
+  deleted, and it also picks up a changed price. That's at most 2 × `podium` extra page loads
+  per run.
 - When Vinted blocks a run, the podium is left as it is until the next clean run.
 - `min_value` still applies; `top` (alerts per run) doesn't.
 

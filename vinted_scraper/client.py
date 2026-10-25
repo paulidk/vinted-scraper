@@ -165,6 +165,7 @@ class ItemPage:
     description: str = ""
     available: bool | None = None  # None: the page didn't say
     status: str = ""  # what the site shows instead of a buy button: "Verkauft", "Reserviert", ...
+    price: float | None = None  # the current asking price, if the page shows one
 
 
 # Sold, reserved or hidden listings carry a status block for buyers ({"title": "Verkauft", ...,
@@ -185,11 +186,17 @@ def parse_item_page(html: str) -> ItemPage | None:
         if not isinstance(data, dict) or data.get("@type") not in (None, "Product"):
             continue
         offers = data.get("offers")
-        availability = str(offers.get("availability") or "") if isinstance(offers, dict) else ""
+        offers = offers if isinstance(offers, dict) else {}
+        availability = str(offers.get("availability") or "")
+        try:
+            price = float(offers["price"]) if offers.get("price") not in (None, "") else None
+        except (TypeError, ValueError):
+            price = None
         page = ItemPage(
             description=data.get("description") or "",
             # schema.org values, sometimes as a full URL: InStock, SoldOut, OutOfStock, ...
             available=availability.rsplit("/", 1)[-1] == "InStock" if availability else None,
+            price=price,
         )
         break
     payload = _rsc_payload(html) if "self.__next_f" in html else ""
