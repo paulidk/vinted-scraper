@@ -35,4 +35,8 @@ def build_scorer(config: dict | None) -> Scorer:
         from .rules import RulesScorer
 
         return RulesScorer(**config)
-    raise ValueError(f"unknown scorer type {kind!r} (expected 'computer' or 'rules')")
+    if kind in ("ram", "memory"):
+        from .memory import MemoryScorer
+
+        return MemoryScorer(**config)
+    raise ValueError(f"unknown scorer type {kind!r} (expected 'computer', 'ram' or 'rules')")

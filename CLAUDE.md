@@ -52,6 +52,7 @@ nothing. Start there when scraping breaks.
 | `vinted_scraper/scoring/gpu_db.py` | ~120 graphics cards → approx. G3D Mark, idle watts |
 | `vinted_scraper/scoring/specs.py` | free-text → CPU, GPU, RAM, storage, form factor, defect/lot/barebone/part/offsite flags |
 | `vinted_scraper/scoring/computer.py` | mini PC value scorer: points vs. price + fees + shipping + electricity |
+| `vinted_scraper/scoring/memory.py` | `type: ram`: RAM sticks/kits → GB, DDR gen, SO-DIMM/DIMM, MHz; points = GB |
 | `vinted_scraper/scoring/rules.py` | generic regex-points scorer; `type: price` = no rules = cheapest first |
 | `vinted_scraper/runner.py` | fetch → filter → score (+ optional description fetch) → store → notify |
 | `vinted_scraper/ranking.py` | rescoring stored listings with the current config; podium diff → `Podium` message |
@@ -161,6 +162,10 @@ A card alone ("Grafikkarte ...", or a card with no CPU or machine word) is `cpu_
 Vinted's text search is fuzzy and ignores the text almost completely with a category filter, so
 the user's `desktops` search is the whole category 3581 (newest first) and `servers` uses
 `params: {order: relevance}`. Category ids are in the catalog page payload (`catalogIds`).
+
+RAM listings (`memory.py`) are parsed from the title only for the size (descriptions mention upgrade
+limits and other machines); generation and module type fall back to the description, and a
+`"... unknown"` reject makes the runner fetch it. Cases: `tests/test_memory.py`.
 
 When you change the parser, add the listing text as a case to `test_ram_and_storage` in
 `tests/test_specs.py`. That table is the regression suite. CPU scores in `cpu_db.py` are

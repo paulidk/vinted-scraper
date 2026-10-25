@@ -186,6 +186,7 @@ async function api(path, body) {
 // --------------------------------------------------------------- scorers
 const SCORER_DEFAULTS = {
   computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only", "offsite"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
+  ram: () => ({ type: "ram", ddr: 4, module: "sodimm", min_gb: 16, max_sticks: 2, reject: ["defect", "offsite", "ecc", "machine"], shipping_estimate: 5 }),
   rules: () => ({ type: "rules", base: 10, rules: [] }),
   price: () => ({ type: "price" }),
 };
@@ -205,6 +206,9 @@ const TEMPLATES = {
     params: { order: "relevance" }, include: "\\b(server|serveur|servidor|serwer|rack|[124]u|poweredge|proliant|primergy|thinksystem|thinkserver|supermicro|xeon|epyc|workstation|precision|z[2-8]\\d0|z[2-8]\\s*g[1-5]|celsius|thinkstation)\\b", pages: 2, min_price: 30, max_price: 800, fetch_details: 10, notify: { min_value: 3, podium: 3, price_drop: true },
     scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 5000, require_cpu: true, assume_ram_gb: 16, shipping_estimate: 20,
       weights: { ram: 0.2, ram_cap: 256, storage: 0.003, storage_cap: 8000 }, form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0 } } }),
+  "SO-DIMM RAM (DDR4)": () => ({ name: "sodimm-ram", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true }, interval_minutes: 60,
+    queries: ["ddr4 sodimm", "so-dimm ddr4", "ddr4 laptop ram", "notebook arbeitsspeicher ddr4", "16gb ddr4 sodimm", "32gb ddr4 sodimm", "2x16gb ddr4 sodimm"],
+    pages: 2, min_price: 5, max_price: 150, fetch_details: 10, notify: { min_value: 25, podium: 3, price_drop: true }, scorer: SCORER_DEFAULTS.ram() }),
   "Any item (rules)": () => ({ name: "", queries: [], notify: { min_value: 0, top: 5, price_drop: true }, scorer: SCORER_DEFAULTS.rules() }),
   "Cheapest first": () => ({ name: "", queries: [], notify: { top: 3, price_drop: true }, scorer: SCORER_DEFAULTS.price() }),
 };
@@ -252,6 +256,28 @@ function computerScorer(sc) {
       field(ff, "server", "Server (rack, PowerEdge, ProLiant…)", { type: "number", placeholder: "0.8" }),
       field(ff, "laptop", "Laptop", { type: "number", placeholder: "0.9" }),
       field(ff, "unknown", "Unknown", { type: "number", placeholder: "0.95" })),
+  ];
+}
+
+function ramScorer(sc) {
+  const reject = new Set(sc.reject ?? ["defect", "offsite", "ecc", "machine"]);
+  const rejectBox = (flag, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
+    onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label);
+  return [
+    h("h3", {}, "What fits the machine"),
+    h("div", { class: "grid" },
+      field(sc, "ddr", "DDR generation", { type: "number", placeholder: "4", hint: "Intel 6th–11th gen: 4; most 12th gen+ minis: 5" }),
+      field(sc, "module", "Module type", { type: "select", default: "sodimm", options: [["sodimm", "SO-DIMM (laptops, mini PCs)"], ["dimm", "DIMM (desktops)"], ["any", "Any"]] }),
+      field(sc, "min_gb", "Min GB per listing", { type: "number", placeholder: "0" }),
+      field(sc, "max_gb", "Max GB per listing", { type: "number", placeholder: "" }),
+      field(sc, "max_sticks", "Max sticks (free slots)", { type: "number", placeholder: "", hint: "mini PCs have 2" }),
+      field(sc, "min_mhz", "Min speed (MHz)", { type: "number", placeholder: "0" }),
+      field(sc, "gb_cap", "GB counted up to", { type: "number", placeholder: "64" }),
+      field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
+    h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
+      rejectBox("defect", "broken"), rejectBox("offsite", "asking to pay outside Vinted"), rejectBox("ecc", "server ECC / registered"),
+      rejectBox("machine", "a whole laptop or PC"), check(sc, "require_known", "missing the generation or module type", true)),
+    h("p", { class: "muted" }, "Points are the GB of the stick or kit, so the value is GB per 100 €."),
   ];
 }
 
@@ -318,7 +344,7 @@ function searchCard(s, i, open) {
   const drawScorer = () => {
     const type = s.scorer.type || "rules";
     tag.textContent = type;
-    scorerBox.replaceChildren(...(type === "computer" ? computerScorer(s.scorer) : type === "price"
+    scorerBox.replaceChildren(...(type === "computer" ? computerScorer(s.scorer) : type === "ram" ? ramScorer(s.scorer) : type === "price"
       ? [h("div", { class: "grid" }, field(s.scorer, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
          h("p", { class: "muted" }, "Ranks listings cheapest first.")]
       : rulesScorer(s.scorer)), ...scoreTester(s));
@@ -366,7 +392,7 @@ function searchCard(s, i, open) {
       h("div", { class: "row" }, check(notify, "price_drop", "Alert again on price drop", true))),
     h("h3", {}, "Scoring"),
     h("div", { class: "grid" }, field(s.scorer, "type", "Scorer", { type: "select", default: "rules",
-      options: [["computer", "Computer / mini PC value"], ["rules", "Rules (any item)"], ["price", "Cheapest first"]],
+      options: [["computer", "Computer / mini PC value"], ["ram", "RAM (GB per 100 €)"], ["rules", "Rules (any item)"], ["price", "Cheapest first"]],
       onchange: () => { if (confirm("Reset the scorer settings for the new type?")) s.scorer = SCORER_DEFAULTS[s.scorer.type](); render(i); } })),
     scorerBox);
 }

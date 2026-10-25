@@ -114,7 +114,7 @@ class Runner:
                 listing.description, listing.partial_description = prev.description, prev.partial
             try:
                 score = scorer.score(listing)
-                if (score.needs_details and detail_budget > 0 and score.reject in (None, "cpu unknown")
+                if (score.needs_details and detail_budget > 0 and (score.reject is None or score.reject.endswith(" unknown"))
                         and (not listing.description or listing.partial_description)):
                     detail_budget -= 1
                     desc = self.client_for(search, listing.url).item_description(listing.id)
