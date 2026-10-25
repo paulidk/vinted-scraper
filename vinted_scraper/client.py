@@ -164,10 +164,19 @@ def parse_catalog_page(html: str, base_url: str = "") -> dict | None:
 class ItemPage:
     description: str = ""
     available: bool | None = None  # None: the page didn't say
+    status: str = ""  # what the site shows instead of a buy button: "Verkauft", "Reserviert", ...
+
+
+# Sold, reserved or hidden listings carry a status block for buyers ({"title": "Verkauft", ...,
+# "name": "buyer_item_status"}) and can't be bought. Their JSON-LD product data is gone entirely,
+# so JSON-LD alone can't tell a sold listing from a page it failed to read (checked 2026-10-25).
+_BUYER_STATUS = re.compile(r'"title":"([^"]+)"\}[^{}]{0,120}"name":"buyer_item_status"')
+_CAN_BUY = re.compile(r'"can_buy":(true|false)')
 
 
 def parse_item_page(html: str) -> ItemPage | None:
-    """Description and availability from the item page's JSON-LD product data."""
+    """Description and availability of a listing page."""
+    page = None
     for blob in _LD_JSON.findall(html):
         try:
             data = json.loads(blob)
@@ -177,12 +186,23 @@ def parse_item_page(html: str) -> ItemPage | None:
             continue
         offers = data.get("offers")
         availability = str(offers.get("availability") or "") if isinstance(offers, dict) else ""
-        return ItemPage(
+        page = ItemPage(
             description=data.get("description") or "",
             # schema.org values, sometimes as a full URL: InStock, SoldOut, OutOfStock, ...
             available=availability.rsplit("/", 1)[-1] == "InStock" if availability else None,
         )
-    return None
+        break
+    payload = _rsc_payload(html) if "self.__next_f" in html else ""
+    status = _BUYER_STATUS.search(payload)
+    can_buy = _CAN_BUY.search(payload)
+    if status or (can_buy and can_buy.group(1) == "false"):
+        page = page or ItemPage()
+        page.available, page.status = False, status.group(1) if status else "can't be bought"
+    elif can_buy and page and page.available is None:
+        page.available = True
+    elif can_buy and not page:
+        page = ItemPage(available=True)
+    return page
 
 
 def parse_item_description(html: str) -> str | None:

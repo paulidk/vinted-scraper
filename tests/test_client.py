@@ -143,3 +143,24 @@ def test_item_page_availability(availability, expected):
     offers = {"@type": "Offer", "price": 20} | ({"availability": availability} if availability else {})
     html = f'<script type="application/ld+json">{json.dumps({"@type": "Product", "description": "x", "offers": offers})}</script>'
     assert parse_item_page(html).available is expected
+
+
+def item_html(payload: str, ld: dict | None = None) -> str:
+    """An item page as Vinted renders it in 2026-10: an RSC chunk, JSON-LD only while it's for sale."""
+    script = f'<script type="application/ld+json">{json.dumps(ld)}</script>' if ld else ""
+    return f"<html>{script}<script>self.__next_f.push([1,{json.dumps(payload)}])</script></html>"
+
+
+def test_sold_listing_has_a_status_block_and_no_json_ld():
+    sold = item_html('{"data":{"item_id":"1","seller_id":"2","theme":"SUCCESS","title":"Verkauft"},"exposures":[],'
+                     '"name":"buyer_item_status","section":"sidebar"},{"can_buy":false,"is_reserved":false}')
+    page = parse_item_page(sold)
+    assert page.available is False and page.status == "Verkauft"
+
+
+def test_available_and_unbuyable_listings():
+    ld = {"@type": "Product", "description": "i5-8500T", "offers": {"@type": "Offer"}}
+    available = parse_item_page(item_html('{"can_buy":true,"is_reserved":false}', ld))
+    assert available.available is True and available.description == "i5-8500T"
+    assert parse_item_page(item_html('{"can_buy":false}')).available is False
+    assert parse_item_page("<html>nothing we know</html>") is None

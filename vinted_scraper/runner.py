@@ -183,12 +183,14 @@ class Runner:
                 checked.add(item_id)
                 page = self.client_for(search, urls[item_id]).item_page(item_id)
                 if page is None or page.available is None:
-                    continue  # unknown: keep it ranked
+                    # Blocked, or the site changed its page again: keep it ranked, but say so.
+                    log.warning("[%s] couldn't tell whether %s is still for sale", search.name, urls[item_id])
+                    continue
                 if page.available:
                     self.store.mark_seen(search.name, item_id)
                     self._complete(search, scorer, item_id, page.description)
                 else:
-                    log.info("[%s] %s is no longer for sale", search.name, item_id)
+                    log.info("[%s] no longer for sale (%s): %s", search.name, page.status or "gone", urls[item_id])
                     self.store.mark_gone(search.name, item_id)
 
         old = self.store.podium(search.name)
