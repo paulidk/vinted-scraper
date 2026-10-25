@@ -164,6 +164,44 @@ class Specs:
         return ", ".join(parts) or "no specs found"
 
 
+# Dealer listings that offer configurations: "8/16/32GB RAM", "256 / 512 / 1000GB", "8-32GB",
+# "128GB-1TB". The price is for the base model, so only the smallest option counts. Two values
+# ("8/256", "4/64") stay a RAM/storage pair: that's how a single machine's specs are written, and a
+# hyphen with spaces is a separator ("i5 - 16GB - 512GB"), not a range.
+_VARIANTS = re.compile(
+    r"(?<![\w.,-])\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)?(?:\s*/\s*\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)?){2,}\b"
+    r"|(?<![\w.,-])\d{1,4}(?:[.,]\d)?(?:gb|go|tb|to)?-\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)\b"
+)
+_VARIANT_PART = re.compile(r"(\d{1,4}(?:[.,]\d)?)\s*(gb|go|tb|to)?")
+
+
+# "➕64GB DDR4 RAM (2x 32GB) +439,00€", "16GB RAM gegen Aufpreis": options on top of the listed
+# price. "(ohne Aufpreis)" marks the base configuration and stays.
+_SURCHARGE_LINE = re.compile(r"^.*(?:\+\s*\d+(?:[.,]\d+)?\s*(?:€|eur)|(?<!ohne )aufpreis).*$", re.M)
+
+
+# "upgradable to 32GB", "maximale Arbeitsspeichergröße: 64GB", "bis zu 32 GB": a limit, not what's installed
+_UPGRADE_LIMIT = re.compile(
+    r"\b(?:max\w*\.?|bis\s*zu|up\s*to|upgrad(?:e?able|bar)(?:\s*to)?|upgrade\s*to|erweiterbar(?:\s*auf)?|"
+    r"aufr[üu]stbar(?:\s*auf)?|jusqu'?\s*[àa]|extensible\s*[àa]|espandibile\s*(?:fino\s*)?a)"
+    # no separator in between ("3.3ghz max - 32Go RAM" names the RAM), then the rest of the clause,
+    # so "64GB DDR4 RAM (2x 32GB)" doesn't count again
+    r"[^.\n\d\-|/]{0,30}\d{1,4}\s*(?:gb|go|tb|to)\b[^,;.\n]*"
+)
+
+
+def _base_variant(m: re.Match) -> str:
+    parts = _VARIANT_PART.findall(m.group(0))
+    last_unit = next((unit for _, unit in reversed(parts) if unit), "gb")
+    # "8/16/32GB": the unit at the end applies to every value without one
+    sizes = [_gb(number, unit or last_unit) for number, unit in parts]
+    # options rise and stay in one size class (8/16/32, 256/512/1000); "Pi 5 / 8GB / 256GB" is no list
+    if sizes != sorted(sizes) or len(set(sizes)) < len(sizes) or sizes[-1] > 8 * sizes[0]:
+        return m.group(0)
+    smallest = sizes[0]
+    return f"{smallest / 1000:g}tb" if smallest >= 1000 else f"{smallest:g}gb"
+
+
 def _gb(number: str, unit: str | None) -> float:
     value = float(number.replace(",", "."))
     return value * 1000 if unit in ("tb", "to") else value
@@ -236,7 +274,7 @@ def _pairs(text: str):
 
 
 def parse_specs(text: str, cpu_overrides: dict | None = None, title: str = "", gpu_overrides: dict | None = None) -> Specs:
-    t = text.lower()
+    t = _VARIANTS.sub(_base_variant, _UPGRADE_LIMIT.sub(" ", _SURCHARGE_LINE.sub("", text.lower())))
     specs = Specs(cpu=lookup(t, cpu_overrides))
     gpus = find_gpus(t, gpu_overrides)
     # The first card in the title is the one fitted: "Vega 56 (wie GTX 1070)". Descriptions also name

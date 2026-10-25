@@ -291,3 +291,41 @@ def test_first_card_in_title_wins():
 def test_model_numbers_and_small_disks(text, ram, storage):
     specs = parse_specs(text)
     assert (specs.ram_gb, specs.storage_gb) == (ram, storage)
+
+
+@pytest.mark.parametrize("text, ram, storage", [
+    ("HP EliteDesk 705 G5 Mini PC Ryzen 5 3400G SSD 8/16/32GB RAM WLAN", 8, None),
+    ("HP Business PC 285 G3 MT Ryzen 5 PRO 8-32GB 128GB-1TB SSD Win 11", 8, 128),
+    ("256 / 512 / 1000GB NVMe SSD, 8 /16 /32 /64GB RAM", 8, 256),
+    ("Mini PC i5 8/256", 8, 256),
+    ("Beelink N100 4/64GB", 4, 64),
+    ("TERRA PC-Mini 6000V4 - i5 - 16GB - 512GB - Top!", 16, 512),
+    ("Beelink GKmini- 8GB - 128GB SSD", 8, 128),
+    ("Raspberry Pi 5 / 8GB / 256 GB M.2 (NVMe)", 8, 256),
+    ("Workstation HP Z6 G4 - 64 GB - 3TB", 64, 3000),
+])
+def test_configuration_lists_count_the_base_option(text, ram, storage):
+    specs = parse_specs(text, title=text)
+    assert (specs.ram_gb, specs.storage_gb) == (ram, storage)
+
+
+def test_surcharge_options_are_not_the_listed_configuration():
+    text = ("HP EliteDesk 705 G5 Mini PC Ryzen 5 3400GE SSD 8/16/32GB RAM WLAN\n"
+            "RAM:\n✔️8GB DDR4 RAM (1x 8GB/2x 4GB) (ohne Aufpreis)\n➕16GB DDR4 RAM (2x 8GB) +35,00€\n"
+            "➕64GB DDR4 RAM (2x 32GB) +439,00€\nM.2 SSD NVMe:\n✔️256GB (ohne Aufpreis)\n➕1TB +100,00€")
+    specs = parse_specs(text, title=text.split("\n")[0])
+    assert (specs.ram_gb, specs.storage_gb) == (8, 256)
+
+
+@pytest.mark.parametrize("text, ram", [
+    ("Mini PC 8GB RAM, upgradable to 32GB RAM", 8),
+    ("16GB RAM (max. 64GB)", 16),
+    ("RAM: 8 GB, erweiterbar auf 32 GB", 8),
+    ("8GB RAM\n- maximale Arbeitsspeichergröße: 64GB DDR4 RAM (2x 32GB)", 8),
+    ("Mini PC 16GB RAM 512GB SSD", 16),
+    ("Mini PC 8GB RAM, upgradable to 32GB RAM, 256GB SSD", 8),
+    ("Kit Workstation X99 Xeon 12 cores x 3.2ghz max - 64Go RAM", 64),
+    ("Dell RAM Memory Upgrade Arbeitsspeicher 16GB DDR4", 16),
+])
+def test_upgrade_limits_are_not_installed_ram(text, ram):
+    assert parse_specs(text).ram_gb == ram

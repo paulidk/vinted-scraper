@@ -129,9 +129,15 @@ Missing parts: `_MISSING` matches "kein/ohne/without/no" followed by a list of p
 "Kein Ram, Festplatte und Netzteil" sets both `barebone` and `no_psu`. The user's desktops and
 mini-pc searches reject both; servers only penalise barebones (often sold without disks).
 
-Known limitation: when several sizes each sit next to a RAM keyword, the largest wins, so
-"8GB RAM, upgradable to 32GB RAM" counts as 32 GB. Fixing it means recognising "upgradable",
-"max", "bis zu", ... near a size.
+Before any of that, `parse_specs` cleans the text:
+- `_SURCHARGE_LINE` drops option lines ("➕64GB DDR4 RAM +439,00€", "gegen Aufpreis"); "(ohne
+  Aufpreis)" marks the base configuration and stays.
+- `_UPGRADE_LIMIT` drops "max. 64GB", "upgradable to 32GB", "bis zu", "erweiterbar auf", ... to the
+  end of the clause, so limits never count as installed.
+- `_VARIANTS` collapses dealer configuration lists to the base (smallest) option: "8/16/32GB",
+  "256 / 512 / 1000GB" (3+ values, rising, max ≤ 8× min) and tight ranges "8-32GB", "128GB-1TB".
+  Two values ("8/256", "4/64") stay a RAM/storage pair; " - " with spaces is a separator.
+When several sizes still sit next to RAM keywords, the largest wins.
 
 `cpu_only` flags parts rather than machines: boards/controllers (`PART`) unless the title names a
 machine noun or model line; processors (socket, sSpec code, "Prozessor" first, or a title that is
