@@ -270,6 +270,7 @@ function ramScorer(sc) {
       field(sc, "module", "Module type", { type: "select", default: "sodimm", options: [["sodimm", "SO-DIMM (laptops, mini PCs)"], ["dimm", "DIMM (desktops)"], ["any", "Any"]] }),
       field(sc, "min_gb", "Min GB per listing", { type: "number", placeholder: "0" }),
       field(sc, "max_gb", "Max GB per listing", { type: "number", placeholder: "" }),
+      field(sc, "min_stick_gb", "Min GB per stick", { type: "number", placeholder: "0", hint: "16: a 16GB stick or 2x16GB, not 2x8GB" }),
       field(sc, "max_sticks", "Max sticks (free slots)", { type: "number", placeholder: "", hint: "mini PCs have 2" }),
       field(sc, "min_mhz", "Min speed (MHz)", { type: "number", placeholder: "0" }),
       field(sc, "gb_cap", "GB counted up to", { type: "number", placeholder: "64" }),

@@ -139,6 +139,7 @@ class MemoryScorer:
         module: str = "sodimm",  # "sodimm", "dimm" or "any"
         min_gb: float = 0,
         max_gb: float | None = None,
+        min_stick_gb: float = 0,  # per stick: 16 = a single 16GB stick or a 2x16GB kit, not 2x8GB
         gb_cap: float = 64,  # GB counted up to this much
         max_sticks: int | None = None,  # free slots in the machine
         min_mhz: int = 0,
@@ -149,6 +150,7 @@ class MemoryScorer:
         self.ddr = {ddr} if isinstance(ddr, int) else set(ddr or [])
         self.module = module
         self.min_gb, self.max_gb, self.gb_cap = min_gb, max_gb, gb_cap
+        self.min_stick_gb = min_stick_gb
         self.max_sticks, self.min_mhz = max_sticks, min_mhz
         self.require_known = require_known
         self.reject = set(reject if reject is not None else ["defect", "offsite", "ecc", "machine"])
@@ -181,6 +183,8 @@ class MemoryScorer:
             return rejected(f"below {self.min_gb:g}GB")
         if self.max_gb is not None and mem.gb > self.max_gb:
             return rejected(f"above {self.max_gb:g}GB")
+        if self.min_stick_gb and mem.gb / mem.sticks < self.min_stick_gb:
+            return rejected(f"sticks below {self.min_stick_gb:g}GB")
         if self.max_sticks and mem.sticks > self.max_sticks:
             return rejected(f"{mem.sticks} sticks")
         if self.min_mhz and mem.mhz and mem.mhz < self.min_mhz:

@@ -65,6 +65,17 @@ def test_ram_scorer_rejects(title, reject):
         assert score.needs_details  # the runner fetches the description
 
 
+@pytest.mark.parametrize("title, reject", [
+    ("Crucial 16GB DDR4 SO-DIMM", None),  # next to the 1x16GB already fitted
+    ("Samsung 32GB (2x16GB) DDR4 SO-DIMM", None),  # replaces 2x8GB
+    ("1x SK hynix 32 GB DDR4 SO-DIMM", None),
+    ("16GB (2x8GB) DDR4 SO-DIMM", "sticks below 16GB"),
+])
+def test_min_stick_size(title, reject):
+    scorer = build_scorer({"type": "ram", "min_gb": 16, "min_stick_gb": 16, "max_sticks": 2})
+    assert scorer.score(Listing(id=1, title=title, price=40, currency="EUR", url="https://www.vinted.de/items/1")).reject == reject
+
+
 def test_value_is_gb_per_100_eur_and_description_fills_gaps():
     scorer = build_scorer({"type": "ram", "shipping_estimate": 5})
     listing = Listing(id=1, title="Samsung 16GB DDR4 3200MHz", price=35, currency="EUR",

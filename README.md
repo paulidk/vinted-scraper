@@ -63,8 +63,9 @@ are the usual bait behind a too-good price like an RTX 4080 PC for 400 €.
 `type: ram` ranks memory sticks by **GB per 100 €** (price, fees and shipping). It reads kits
 ("32GB (2x16GB)", "2 × 8 GB", "Lot de 2 barrettes 8 Go", "8/16/32GB" = the smallest), the DDR
 generation (also from "PC4-2666" or a bare speed like "3200"), SO-DIMM vs. desktop DIMM and the
-speed, and skips what doesn't fit: the wrong generation or module type, fewer than `min_gb`, more
-sticks than `max_sticks`, server ECC/registered sticks, and whole laptops that just list their RAM.
+speed, and skips what doesn't fit: the wrong generation or module type, fewer than `min_gb`, sticks
+smaller than `min_stick_gb` (16 keeps a single 16 GB stick and 2×16 kits but not 2×8), more sticks
+than `max_sticks`, server ECC/registered sticks, and whole laptops that just list their RAM.
 A title that doesn't say DDR4 or SO-DIMM gets its description fetched (within `fetch_details`).
 See the `sodimm-ram` example in `config.example.yaml`.
 

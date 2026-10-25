@@ -171,6 +171,7 @@ searches:
   #     ddr: 4               # Intel 6th–11th gen and Ryzen up to 5000: DDR4; most 12th gen+ minis: 5
   #     module: sodimm       # sodimm (laptops, mini PCs), dimm (desktops) or any
   #     min_gb: 16           # per listing (stick or kit)
+  #     min_stick_gb: 16     # per stick: a 16GB stick next to 1x16, or 2x16 to replace 2x8; no 2x8 kits
   #     max_sticks: 2        # free slots
   #     # max_gb: 64
   #     # min_mhz: 2666      # faster sticks run at the CPU's speed, slower ones slow it down
