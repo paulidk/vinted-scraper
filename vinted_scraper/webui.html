@@ -335,6 +335,7 @@ function searchCard(s, i, open) {
   const summaryName = h("span", {}, s.name || "(unnamed)");
   const tag = h("span", { class: "tag" }, s.scorer.type || "rules");
   const siteTag = h("span", { class: "tag" }, sites.map((x) => SITE_NAMES[x]).join(" + "));
+  const offTag = h("span", { class: "tag", hidden: s.enabled !== false }, "off");
   const siteBox = (site) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: sites.includes(site), onchange: (e) => {
     const next = new Set(sitesOf(s));
     e.target.checked ? next.add(site) : next.delete(site);
@@ -354,13 +355,16 @@ function searchCard(s, i, open) {
   const notify = obj(s, "notify");
   if (open) openCards.add(s);
   return h("details", { class: "card", open: openCards.has(s), ontoggle: (e) => (e.target.open ? openCards.add(s) : openCards.delete(s)) },
-    h("summary", {}, summaryName, tag, siteTag, h("span", { class: "grow" }),
+    h("summary", {}, summaryName, tag, siteTag, offTag, h("span", { class: "grow" }),
       h("button", { class: "btn", title: "Duplicate", onclick: (e) => { e.preventDefault(); const copy = structuredClone(s); openCards.add(copy); copy.name = (s.name || "search") + "-copy"; cfg.searches.splice(i + 1, 0, copy); touch(); render(i + 1); } }, "Duplicate"),
       h("button", { class: "btn danger", onclick: (e) => { e.preventDefault(); if (confirm(`Delete search "${s.name}"?`)) { cfg.searches.splice(i, 1); touch(); render(); } } }, "Delete")),
     h("h3", {}, "What to search"),
     h("div", { class: "grid wide" },
       field(s, "name", "Name (unique)", { placeholder: "mini-pc", onchange: () => (summaryName.textContent = s.name || "(unnamed)") }),
-      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen")),
+      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen"),
+        h("label", { class: "check" }, h("input", { type: "checkbox", checked: s.enabled !== false, onchange: (e) => {
+          if (e.target.checked) delete s.enabled; else s.enabled = false;
+          offTag.hidden = e.target.checked; touch(); } }), "Enabled")),
       vinted ? field(s, "domain", "Vinted country site", { list: "domains", placeholder: cfg.client?.domain || "www.vinted.de", hint: "Leave empty to use the default from General" }) : null,
       field(s, "queries", "Search terms (one per line)", { type: "lines", placeholder: "optiplex micro\nthinkcentre tiny", full: true,
         hint: (vinted && ka ? "Each term runs on Vinted, then on Kleinanzeigen; all results are ranked together. " : "")

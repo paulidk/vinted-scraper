@@ -231,6 +231,15 @@ def test_description_fetched_by_one_search_serves_the_others(tmp_path, catalog_i
     assert "i7-8700t" in runner.store.db.execute("SELECT summary FROM items WHERE search='other' AND id=105").fetchone()[0]
 
 
+def test_disabled_search_only_runs_when_named(tmp_path, catalog_items):
+    runner, fake = make_runner(tmp_path, catalog_items)
+    runner.config.searches[0].enabled = False
+    assert runner.run_once() == [] and runner.run_due() == []
+    assert "c" not in fake  # no client was even created
+    assert runner.run_once(["pcs"])  # named explicitly: runs anyway
+    runner.run_forever()  # returns at once instead of looping over nothing
+
+
 def test_full_sweep_pages_deep_again(tmp_path, catalog_items):
     runner, fake = make_runner(tmp_path, catalog_items, pages=5)
     calls = []

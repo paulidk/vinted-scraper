@@ -51,6 +51,7 @@ class SearchConfig:
     scorer: dict = field(default_factory=dict)
     notify: NotifyRules = field(default_factory=NotifyRules)
     interval_minutes: float | None = None  # how often this search runs; None = the global interval
+    enabled: bool = True  # off: kept in the config, but `run` and `once` skip it unless it's named
 
     def keeps(self, listing) -> bool:
         if self.min_price is not None and listing.price < self.min_price:
@@ -166,6 +167,7 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
         scorer=raw.get("scorer") or {},
         notify=NotifyRules(**(raw.get("notify") or {})),
         interval_minutes=raw.get("interval_minutes"),
+        enabled=bool(raw.get("enabled", True)),
     )
 
 

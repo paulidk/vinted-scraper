@@ -110,6 +110,8 @@ sells fast often, rare listings seldom. `quiet_hours: [1, 7]` pauses everything 
 hardly anything gets listed and a 24/7 rhythm looks like a bot. When each search last ran is kept in
 the database, so restarting doesn't run everything again at once.
 
+- `enabled: false` pauses a search but keeps its settings (web UI: the "Enabled" box). `run` and
+  `once` skip it; `once <name>` still runs it.
 - `run` stays up and starts each search when it's due.
 - `once` runs every search now. `once --if-due` only runs what's due and respects `quiet_hours`;
   that's what the systemd timer calls every 10 minutes.

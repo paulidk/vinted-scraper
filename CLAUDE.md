@@ -177,7 +177,9 @@ Per search `interval_minutes` (else the global one) and global `quiet_hours` ([s
 time, may wrap midnight). `runs` table keeps each search's last start; `Runner.run_due` runs what's
 due, `run_forever` sleeps until the next search is due or quiet hours end. `once --if-due` (systemd
 timer every 10 min) allows up to 5 min slack so a 20-min search doesn't slip to 30. The user runs
-mini-pc every 20 min, desktops 30, servers 120, quiet 1–7.
+mini-pc every 20 min, desktops 30, servers 120, quiet 1–7. `enabled: false` pauses a search
+(`Runner.active`); `once <name>` still runs it. Since 2026-10-25 (PC bought) only `sodimm-ram` (60 min)
+is enabled; the three PC searches are paused.
 
 ## Runner behaviour worth keeping
 

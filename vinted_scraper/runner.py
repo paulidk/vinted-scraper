@@ -226,12 +226,16 @@ class Runner:
             listing = self.store.listing(search.name, item_id)
             self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
 
+    @property
+    def active(self) -> list[SearchConfig]:
+        return [s for s in self.config.searches if s.enabled]
+
     def run_once(self, names: list[str] | None = None) -> list[Deal]:
-        """Run every search (or the named ones) now, whatever its schedule."""
+        """Run every enabled search (or the named ones, even if disabled) now, whatever its schedule."""
         unknown = set(names or []) - {s.name for s in self.config.searches}
         if unknown:
             raise ValueError(f"no search named {', '.join(sorted(unknown))}")
-        return self.run_searches([s for s in self.config.searches if not names or s.name in names])
+        return self.run_searches([s for s in self.config.searches if s.name in names] if names else self.active)
 
     def run_due(self, slack: float = 0.0) -> list[Deal]:
         """Run the searches whose interval is up, unless it's quiet hours.
@@ -243,7 +247,7 @@ class Runner:
         if self.config.is_quiet(_minute_of_day(now)):
             log.info("quiet hours, nothing to do")
             return []
-        due = [s for s in self.config.searches if self.seconds_until_due(s, now) <= slack]
+        due = [s for s in self.active if self.seconds_until_due(s, now) <= slack]
         return self.run_searches(due)
 
     def seconds_until_due(self, search: SearchConfig, now: float) -> float:
@@ -279,6 +283,9 @@ class Runner:
         return all_deals
 
     def run_forever(self) -> None:
+        if not self.active:
+            log.error("every search is disabled (enabled: false), nothing to run")
+            return
         while True:
             now = time.time()
             if self.config.is_quiet(_minute_of_day(now)):
@@ -288,7 +295,7 @@ class Runner:
                 continue
             self.run_due()
             now = time.time()
-            waits = {s.name: self.seconds_until_due(s, now) for s in self.config.searches}
+            waits = {s.name: self.seconds_until_due(s, now) for s in self.active}
             name = min(waits, key=waits.get)
             delay = max(60.0, waits[name])
             log.info("next: %s in %.1f min", name, delay / 60)
