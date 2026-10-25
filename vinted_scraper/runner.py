@@ -33,6 +33,10 @@ class Runner:
         self._clients: dict[str, VintedClient] = {}
         self._blocked: set[str] = set()  # searches whose fetch was cut short this run
         self._gap: dict[str, float] = {}  # seconds until a search is due again, jitter included
+        # `once --full`: page every query to the end (or `sweep_pages` deep) instead of stopping
+        # at listings seen before, e.g. to catch up after a break or after widening the filters
+        self.sweep = False
+        self.sweep_pages = 0
 
     def client(self, domain: str) -> VintedClient:
         if domain not in self._clients:
@@ -65,9 +69,10 @@ class Runner:
             key = json.dumps(params if domain == search.domain else query, sort_keys=True)
             # Each query is fetched `pages` deep once (also after `pages` was raised); after that
             # only until the listings from earlier runs start, usually a single page.
-            full = self.store.crawled_pages(search.name, key) < search.pages
+            full = self.sweep or self.store.crawled_pages(search.name, key) < search.pages
+            pages = max(search.pages, self.sweep_pages) if self.sweep else search.pages
             try:
-                raw_items = client.search(params, pages=search.pages, until=None if full else mostly_known)
+                raw_items = client.search(params, pages=pages, until=None if full else mostly_known)
             except BlockedError as exc:
                 # Retries are exhausted: hammering on with the remaining queries only digs
                 # the hole deeper. Keep what we have and try again next run; other sites go on.
@@ -77,7 +82,7 @@ class Runner:
                 blocked.add(domain)
                 continue
             if full:
-                self.store.set_crawled_pages(search.name, key, search.pages)
+                self.store.set_crawled_pages(search.name, key, pages)
             log.info("[%s] %s %s: %d items", search.name, domain.removeprefix("www."),
                      params.get("search_text") or "(no text)", len(raw_items))
             for raw in raw_items:
@@ -212,9 +217,12 @@ class Runner:
         self.store.set_description(search.name, item_id, description)
         self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
 
-    def run_once(self) -> list[Deal]:
-        """Run every search now, whatever its schedule."""
-        return self.run_searches(self.config.searches)
+    def run_once(self, names: list[str] | None = None) -> list[Deal]:
+        """Run every search (or the named ones) now, whatever its schedule."""
+        unknown = set(names or []) - {s.name for s in self.config.searches}
+        if unknown:
+            raise ValueError(f"no search named {', '.join(sorted(unknown))}")
+        return self.run_searches([s for s in self.config.searches if not names or s.name in names])
 
     def run_due(self, slack: float = 0.0) -> list[Deal]:
         """Run the searches whose interval is up, unless it's quiet hours.

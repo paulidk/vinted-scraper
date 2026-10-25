@@ -31,6 +31,7 @@ python -m vinted_scraper probe "https://www.vinted.de/catalog?search_text=optipl
 python -m vinted_scraper -v -c config.yaml once     # one full run with debug logging
 python -m vinted_scraper -c config.yaml run         # forever, each search on its own interval, quiet_hours off
 python -m vinted_scraper -c config.yaml once        # every search now; `once --if-due` = only due ones (timer)
+python -m vinted_scraper -c config.yaml once --full --pages 10 mini-pc   # deep re-sweep, ignores "already known"
 python -m vinted_scraper -c config.yaml top         # best items seen in the last 72h (rescored first)
 python -m vinted_scraper -c config.yaml podium      # current top-N of every search
 python -m vinted_scraper -c config.yaml ui          # config editor at http://localhost:8765

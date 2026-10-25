@@ -102,6 +102,10 @@ the database, so restarting doesn't run everything again at once.
 - `run` stays up and starts each search when it's due.
 - `once` runs every search now. `once --if-due` only runs what's due and respects `quiet_hours`;
   that's what the systemd timer calls every 10 minutes.
+- `once --full` pages every search term deep again instead of stopping at listings seen before, e.g.
+  after a break or after widening the filters. `--pages 10` goes deeper than each search's `pages`;
+  names limit it to some searches: `once --full --pages 10 mini-pc`. That's many requests (about
+  one per page and term), so use it now and then, not on a schedule.
 
 Shorter isn't better: below about 15 minutes the extra speed isn't worth the higher risk of being
 blocked for hours.

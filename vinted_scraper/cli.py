@@ -27,6 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     once = sub.add_parser("once", help="scrape every search once and exit")
     once.add_argument("--if-due", action="store_true",
                       help="only searches whose interval is up, nothing in quiet_hours (for cron / systemd timers)")
+    once.add_argument("--full", action="store_true",
+                      help="page every search term deep instead of stopping at listings seen before")
+    once.add_argument("--pages", type=int, default=0,
+                      help="with --full: result pages per term (default: each search's `pages`)")
+    once.add_argument("search", nargs="*", help="only these searches (default: all)")
     top = sub.add_parser("top", help="show the best items seen recently")
     top.add_argument("search", nargs="?")
     top.add_argument("-n", type=int, default=15)
@@ -108,7 +113,12 @@ def main(argv: list[str] | None = None) -> int:
         # interval) early, so a 20-minute search doesn't slip to 30 because the timer came early.
         runner.run_due(slack=min(300.0, min(config.interval(s) for s in config.searches) * 60 / 4))
     elif args.command == "once":
-        runner.run_once()
+        runner.sweep, runner.sweep_pages = args.full, args.pages
+        try:
+            runner.run_once(args.search)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
     else:
         runner.run_forever()
     return 0

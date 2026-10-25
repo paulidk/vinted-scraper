@@ -1,5 +1,7 @@
 import copy
 
+import pytest
+
 from vinted_scraper.config import NotifyRules, SearchConfig, Config
 from vinted_scraper.client import ClientSettings, ItemPage
 from vinted_scraper.runner import Runner
@@ -225,3 +227,24 @@ def test_description_fetched_by_one_search_serves_the_others(tmp_path, catalog_i
     runner.run_once()
     assert 105 not in fake["c"].detail_calls  # no second fetch for the same listing
     assert "i7-8700t" in runner.store.db.execute("SELECT summary FROM items WHERE search='other' AND id=105").fetchone()[0]
+
+
+def test_full_sweep_pages_deep_again(tmp_path, catalog_items):
+    runner, fake = make_runner(tmp_path, catalog_items, pages=5)
+    calls = []
+    client = runner.client("www.vinted.de")
+    original = client.search
+
+    def search(params, pages=1, until=None):
+        calls.append((pages, until is None))
+        return original(params, pages)
+
+    client.search = search
+    runner.run_once()
+    runner.run_once()
+    assert calls == [(5, True)] * 2 + [(5, False)] * 2  # deep once, then only until known listings
+    runner.sweep, runner.sweep_pages = True, 9
+    runner.run_once(["pcs"])
+    assert calls[4:] == [(9, True)] * 2
+    with pytest.raises(ValueError):
+        runner.run_once(["nope"])
