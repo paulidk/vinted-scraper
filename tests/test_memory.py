@@ -12,7 +12,10 @@ from vinted_scraper.scoring.memory import parse_memory
     ("Kit ram 8GB (2x4GB) Kingston DDR4-2400 so-dimm KVR24S17S6/4", 8, 2, 4, "sodimm"),
     ("Kit ram 8GB (2x4GB) DDR3L-1600 so-dimm Advantech + omaggio 1GB", 8, 2, 3, "sodimm"),
     ("Mémoire Sodimm DDR4 2666 MHz 24 Go", 24, 1, 4, "sodimm"),
-    ("💻 Lot de 2 barrettes de RAM SK hynix 8 Go DDR4 2666 MHz", 16, 2, 4, None),
+    ("💻 Lot de 2 barrettes de RAM SK hynix 8 Go DDR4 2666 MHz", 8, 2, 4, None),  # 2x4 or 2x8: the smaller
+    ("Lot de 2 barrettes RAM DDR4 SO-DIMM 16 Go – Samsung + G.Skill", 16, 2, 4, "sodimm"),  # 18 €: 2x8
+    ("SK hynix 16gb ddr4 2400mhz laptop ram 8gb", 8, 1, 4, "sodimm"),
+    ("hp stream laptop 11 4gb 64 GB", 4, 1, None, "sodimm"),
     ("RAM Kingston 8GB DDR4 so - dimm PC4-2400T per Notebook", 8, 1, 4, "sodimm"),
     ("Samsung RAM 16 GB  DDR 4 (2x8 GB Riegel)", 16, 2, 4, None),
     ("Arbeitsspeicher 16 GB DD4 2133", 16, 1, 4, None),
@@ -31,6 +34,14 @@ from vinted_scraper.scoring.memory import parse_memory
     ("ram sodim 4 go pc3l 12800s hynix", 4, 1, 3, "sodimm"),
     ("Mémoire RAM Crucial 16 Go 2666MHz 288-broches DDR4 (CT16G4DFRA266)", 16, 1, 4, "dimm"),
     ("Corsair Vengeance LPX 16GB (2x8GB) RAM", 16, 2, None, "dimm"),
+    ("Kingston 16GB DDR4 DIMM 3200", 16, 1, 4, "dimm"),
+    ("Kingston Fury Beast 8gb DDR4   200€ für 4 Stück im Set", 8, 1, 4, "dimm"),  # listed at 65 € = one stick
+    ("RAM DDR4 G.Skill Aegis 16GB (2x8GB) 3200MHz CL16", 16, 2, 4, "dimm"),
+    ("4x G.Skill Aegis DDR4 RAM 32GB 3200MHz", 32, 4, 4, "dimm"),
+    ("2x Corsair Vengeance LPX DDR4 RAM Arbeitsspeicher 16 GB", 32, 2, 4, "dimm"),
+    ("Kit ram 16GB Kingston 2x8GB DDR4 3200MHz UDIMM per PC fisso", 16, 2, 4, "dimm"),
+    ("Barrette mémoire 8 Go DDR4 pour PC de bureau", 8, 1, 4, "dimm"),
+    ("RAM Kingston 8GB DDR4 so dimm PC4-2400T", 8, 1, 4, "sodimm"),
     ("Barrette so-dimm ddr2 Ramaxel", None, 1, 2, "sodimm"),
 ])
 def test_parse_memory(title, gb, sticks, ddr, module):

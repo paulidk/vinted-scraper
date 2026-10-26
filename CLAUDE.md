@@ -172,7 +172,10 @@ means no drives included. Cases: `tests/test_drives.py`, `tests/test_nas.py`.
 
 RAM listings (`memory.py`) are parsed from the title only for the size (descriptions mention upgrade
 limits and other machines); generation and module type fall back to the description, and a
-`"... unknown"` reject makes the runner fetch it. Cases: `tests/test_memory.py`.
+`"... unknown"` reject makes the runner fetch it. Ambiguous sizes take the smaller reading: only a
+leading "2x Samsung 8GB" multiplies, "Lot de 2 / 2 barrettes / Paar" + one size = that size in total,
+two sizes without a kit = the smaller, "200€ für 4 Stück" = the listing is one stick. Cases:
+`tests/test_memory.py`.
 
 When you change the parser, add the listing text as a case to `test_ram_and_storage` in
 `tests/test_specs.py`. That table is the regression suite. CPU scores in `cpu_db.py` are
@@ -186,7 +189,7 @@ due, `run_forever` sleeps until the next search is due or quiet hours end. `once
 timer every 10 min) allows up to 5 min slack so a 20-min search doesn't slip to 30. The user runs
 mini-pc every 20 min, desktops 30, servers 120, quiet 1–7. `enabled: false` pauses a search
 (`Runner.active`); `once <name>` still runs it. Since 2026-10-25 (PC bought) only `sodimm-ram` (60 min)
-is enabled, plus `hdd` and `nas` (60 min each); the three PC searches are paused.
+is enabled, plus `dimm-ram` (desktop sticks), `hdd` and `nas` (60 min each); the three PC searches are paused.
 
 ## Runner behaviour worth keeping
 

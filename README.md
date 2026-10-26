@@ -67,7 +67,9 @@ speed, and skips what doesn't fit: the wrong generation or module type, fewer th
 smaller than `min_stick_gb` (16 keeps a single 16 GB stick and 2×16 kits but not 2×8), more sticks
 than `max_sticks`, server ECC/registered sticks, and whole laptops that just list their RAM.
 A title that doesn't say DDR4 or SO-DIMM gets its description fetched (within `fetch_details`).
-See the `sodimm-ram` example in `config.example.yaml`.
+See the `sodimm-ram` example in `config.example.yaml`; `module: dimm` (and `max_sticks: 4`) does
+the same for desktop sticks. When a title is ambiguous ("Lot de 2 barrettes 16 Go" = 2×8 or 2×16?,
+"16gb ... ram 8gb") the smaller reading counts, so a misread listing never tops the alert.
 
 ## Hard drives and NAS
 

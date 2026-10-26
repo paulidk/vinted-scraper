@@ -25,6 +25,8 @@ _TOTAL = re.compile(rf"(\d{{1,3}})\s*{_UNIT}\s*\(?(?:gesamt|insgesamt|total|tota
 # "2x Samsung 8GB", "Lot de 2 barrettes", "2 Riegel", "Paar"
 _COUNT = re.compile(r"(?<![\w.,])(\d)\s*[x×]\s+(?!\d)|\blot\s*(?:de|of|di)?\s*(\d)\b"
                     r"|\b(\d)\s*(?:x\s*)?(?:barrettes?|riegel|module?s?|sticks?|stück|stk|pcs|pezzi|moduli|memorie|memoria|kości)\b")
+# The title names the price of the whole set, so the listing price is for one stick
+_PRICE_FOR_SET = re.compile(r"\d+\s*(?:€|eur\w*)\s*(?:für|fuer|for|pour|per)\s*(?:alle\s*|all\s*|les\s*)?\d")
 _PAIR = re.compile(r"\b(paar|pair|paire|coppia|par)\b")
 # "DDR4", "DDR4L", "dd4" (typo), "PC4-2666V", "PC3L-12800"
 _DDR = re.compile(r"\bddr\s*(\d)l?\b|\bddr(\d)l?-|\bdd(\d)\b|\bpc(\d)l?[\s-]*\d{4,5}|\bpc([345])l?\b")
@@ -34,8 +36,9 @@ _MHZ = re.compile(r"\b(\d{4})\s*(?:mhz|mt/?s)|\bddr\d\w?-(\d{4})\b|\bpc\dl?[\s-]
                   rf"|\b({'|'.join(map(str, SPEEDS))})\b(?!\s*(?:gb|go|€|eur))")
 SODIMM = re.compile(r"\b(so-?\s*dimm|sodim+|sodim|so\s*-\s*dimm|260[\s-]*(?:pin|polig|broches)|laptop\w*|notebook\w*|"
                     r"portable|portatile|portátil|portatil|macbook|nuc|mini[\s-]?pc)\b")
+# A bare "DIMM" is a desktop stick, but not the "dimm" of "so-dimm" / "so dimm"
 DIMM = re.compile(r"\b(u-?dimm|desktop|288[\s-]*(?:pin|polig|broches)|lpx|fury\s*beast|ripjaws|trident|"
-                  r"dominator|tower|rgb)\b")
+                  r"dominator|aegis|flare|sniper|spectrix|gammix|vulcan|t-?force|tower|rgb|pc\s*fisso|de\s*bureau|(?<!so-)(?<!so )(?<!so - )dimm)\b")
 ECC = re.compile(r"(?<!non-)(?<!non )(?<!kein )(?<!ohne )\b(ecc|registered|reg|r-?dimm|lr-?dimm|rdimm|lrdimm|server|serveur|[12]rx4|hpe)\b")
 # A whole laptop or PC that merely lists its RAM.
 # Model names don't count: sticks are often sold as "aus ThinkPad ausgebaut".
@@ -91,12 +94,22 @@ def _size(title: str) -> tuple[float | None, int]:
     sizes = sorted({gb for m in _SIZE.finditer(title) if 0 < (gb := int(m.group(1))) <= 128})
     if not sizes:
         return None, 1
+    if _PRICE_FOR_SET.search(title):
+        return sizes[-1], 1  # "8gb DDR4 200€ für 4 Stück im Set" listed at 65 €: one stick
     count = _COUNT.search(title)
     n = int(next(g for g in count.groups() if g)) if count else (2 if _PAIR.search(title) else 1)
+    # Only "2x Samsung 8GB" clearly means n sticks of that size. "Lot de 2 barrettes 16 Go – Samsung +
+    # G.Skill" for 18 € is 2x8 as often as 2x16, so the size counts as the total: a missed deal is
+    # better than a false #1.
+    leading = bool(count and count.group(1))
     if n > 1 and len(sizes) > 1 and sizes[-1] in (n * s for s in sizes[:-1]):
         return sizes[-1], n  # "Kit de 16 Go - 2 x barrettes 8 Go"
-    if sizes[-1] not in _STICK_SIZES:
-        return sizes[-1], n  # "6x DDR4 SO-DIMM – 28 GB": no stick has 28 GB, so that's the total
+    if len(sizes) > 1:
+        # "16gb ddr4 laptop ram 8gb", "hp stream laptop 4gb 64 GB": no telling, so the smaller
+        return sizes[0] * (n if leading else 1), n
+    if not leading or sizes[-1] not in _STICK_SIZES or n * sizes[-1] > 64:
+        # "6x DDR4 SO-DIMM – 28 GB": no stick has 28 GB; "4x G.Skill Aegis 32GB" for 150 €: 4x8, not 4x32
+        return sizes[-1], n
     return sizes[-1] * n, n
 
 
