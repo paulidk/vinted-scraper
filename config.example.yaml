@@ -14,6 +14,12 @@ client:
   # Optional, only needed if your IP gets blocked. Residential proxies work best.
   proxies: []
   #  - http://user:pass@proxy-host:port
+  # eBay's Browse API keys (developer.ebay.com → Application Keys → Production). Without this
+  # section EBAY_CLIENT_ID / EBAY_CLIENT_SECRET are read from the environment.
+  # ebay:
+  #   client_id: ${EBAY_CLIENT_ID}
+  #   client_secret: ${EBAY_CLIENT_SECRET}
+  #   zip: "06112"          # optional, in quotes: shipping costs that depend on the distance
 
 notifiers:
   - type: console
@@ -150,6 +156,20 @@ searches:
   # `shipping: true`, or paste a search URL with your town and radius in it:
   #   url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50"
   # `offsite` (pay outside Vinted) is ignored for Kleinanzeigen listings: PayPal is normal there.
+
+  # ------------------------------------------- eBay (Browse API)
+  # Add `ebay` to `sites` in any search (needs the API keys under `client.ebay`), or search it
+  # alone with `site: ebay`. Only "Sofort-Kaufen" listings (Best Offer included), located in and
+  # shipping to Germany, newest first. Each listing's real shipping cost replaces
+  # `shipping_estimate`. Filters go in `ebay:`:
+  #   ebay:
+  #     category: 179        # the number after /sch/ or _sacat= in an eBay search URL
+  #     condition: used      # used, new; default any
+  #     seller: privat       # privat or gewerblich; default both
+  #     # auctions: true     # also auctions, ranked by the current bid, which isn't the final price
+  #     # order: relevance   # best match instead of newest first
+  #     # country: ""        # sellers outside Germany too
+  # An eBay search URL works as well: url: "https://www.ebay.de/sch/i.html?_nkw=optiplex&_udhi=150"
 
   # ------------------------------------------- RAM upgrades: GB per 100 €
   # Reads kits ("32GB (2x16GB)", "2 × 8 GB", "Lot de 2 barrettes 8 Go"), DDR generation, SO-DIMM vs.

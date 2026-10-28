@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score
+from .base import Score, offsite_ignored, shipping
 from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant
 
 _UNIT = r"(?:gb|go|g)\b"
@@ -171,15 +171,15 @@ class MemoryScorer:
 
     def score(self, listing: Listing) -> Score:
         mem = parse_memory(listing.title, listing.description)
-        cost = round(listing.effective_price + self.shipping_estimate, 2)
+        cost = round(listing.effective_price + shipping(listing, self.shipping_estimate), 2)
         summary = mem.summary()
 
         def rejected(reason: str, needs_details: bool = False) -> Score:
             return Score(0, cost, summary, reject=reason, needs_details=needs_details)
 
         for flag in ("offsite", "defect", "machine", "ecc"):
-            if flag == "offsite" and "kleinanzeigen." in listing.url:
-                continue  # paying by PayPal is normal there
+            if flag == "offsite" and offsite_ignored(listing):
+                continue  # only Vinted has a checkout of its own
             if flag in self.reject and getattr(mem, flag):
                 return rejected(flag)
         if mem.gb is None:

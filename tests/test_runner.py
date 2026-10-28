@@ -259,3 +259,30 @@ def test_full_sweep_pages_deep_again(tmp_path, catalog_items):
     assert calls[4:] == [(9, True)] * 2
     with pytest.raises(ValueError):
         runner.run_once(["nope"])
+
+
+def test_site_without_api_key_is_skipped_not_blocked(tmp_path, catalog_items):
+    from vinted_scraper.client import SetupError
+
+    search = SearchConfig(
+        name="pcs", domain="www.vinted.de", scorer={"type": "computer"}, notify=NotifyRules(min_value=1, podium=3),
+        queries=[{"search_text": "optiplex", "domain": "www.ebay.de"}, {"search_text": "mini pc", "domain": "www.ebay.de"},
+                 {"search_text": "optiplex", "domain": "www.vinted.de"}],
+    )
+    cfg = Config(searches=[search], client=ClientSettings(), notifiers=[], database=str(tmp_path / "db.sqlite"))
+    calls = []
+
+    def factory(settings):
+        client = FakeClient(settings, catalog_items)
+        if "ebay" in settings.domain:
+            def no_key(params, pages=1, until=None):
+                calls.append(params)
+                raise SetupError("no eBay API keys")
+            client.search = no_key
+        return client
+
+    runner = Runner(cfg, client_factory=factory)
+    runner.notifiers = []
+    assert runner.run_once()  # Vinted's listings still make a podium
+    assert len(calls) == 1  # the other eBay term isn't tried
+    assert "pcs" not in runner._blocked

@@ -14,7 +14,7 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score
+from .base import Score, offsite_ignored, shipping
 from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant
 
 _NUM = r"(\d{1,2}\.\d{3}|\d{1,4}(?:[.,]\d{1,2})?)"
@@ -184,15 +184,15 @@ class DriveScorer:
     def score(self, listing: Listing) -> Score:
         drives = parse_drives(listing.title, listing.description)
         energy = self.energy_cost(drives)
-        cost = round(listing.effective_price + self.shipping_estimate + energy, 2)
+        cost = round(listing.effective_price + shipping(listing, self.shipping_estimate) + energy, 2)
         summary = f"{drives.summary()} | energy {energy:.0f} {listing.currency}/{self.years:g}y"
 
         def rejected(reason: str) -> Score:
             return Score(0, cost, summary, reject=reason)
 
         for flag in ("offsite", "defect", "device", "sas", "external"):
-            if flag == "offsite" and "kleinanzeigen." in listing.url:
-                continue  # paying by PayPal is normal there
+            if flag == "offsite" and offsite_ignored(listing):
+                continue  # only Vinted has a checkout of its own
             if flag in self.reject and getattr(drives, flag):
                 return rejected(flag)
         if drives.empty or drives.tape:

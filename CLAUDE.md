@@ -47,6 +47,7 @@ nothing. Start there when scraping breaks.
 |---|---|
 | `vinted_scraper/client.py` | curl_cffi HTTP client, Cloudflare handling, catalog-page and item-page parsing |
 | `vinted_scraper/kleinanzeigen.py` | Kleinanzeigen client: search paths, Astro island parsing, listing page (description, reserved/deleted) |
+| `vinted_scraper/ebay.py` | eBay client over the official Browse API: OAuth token, search filters, item details, eBay URL → params |
 | `vinted_scraper/models.py` | `Listing` built from a normalized item dict |
 | `vinted_scraper/scoring/cpu_db.py` | ~380 CPUs (mini PC, desktop, Xeon, EPYC) → approx. PassMark + TDP, estimation for unknown models |
 | `vinted_scraper/scoring/gpu_db.py` | ~120 graphics cards → approx. G3D Mark, idle watts |
@@ -115,6 +116,30 @@ main site, so queries crawled before multi-site support aren't crawled deep agai
 - PayPal is normal there, hence the scorer skips `offsite` for Kleinanzeigen listings.
 - The user's config: mini-pc (14 terms), desktops (Vinted category 3581 + Kleinanzeigen 228) and
   servers (13 terms incl. workstations), all on both sites, Kleinanzeigen with `shipping: true`.
+
+## eBay (`ebay.py`)
+
+Third source, `sites: [..., ebay]`, filters in `ebay:` (`category`, `condition`, `seller`, `auctions`,
+`order`, `country`). Unlike the other two it is the official **Browse API**
+(`api.ebay.com/buy/browse/v1`), so no scraping, fingerprints or pacing: `EbayClient` is its own
+class with the same `search` / `item_page` / `item_description` methods. Keys (App ID + Cert ID of
+a Production keyset) come from `client.ebay` or `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`; the
+client-credentials token lasts 2 h and is renewed on 401. Written from the API docs on 2026-10-28;
+the cloud sandbox couldn't reach api.ebay.com, so it had not been run against the live API then.
+
+- Query domain is `www.ebay.de`, which picks the marketplace (`EBAY_DE`) and country. Ids are
+  `ebay.ID_OFFSET` (2·10^15) + the legacy item number; URLs are rebuilt as `/itm/<number>`.
+- Default filter: `buyingOptions:{FIXED_PRICE}` (Best Offer listings carry FIXED_PRICE too),
+  `itemLocationCountry:DE`, `deliveryCountry:DE`, `sort=newlyListed`, `fieldgroups=EXTENDED` (adds
+  `shortDescription`, stored as a partial description). 100 per page.
+- `Listing.shipping` (stored in the `shipping` column) holds the cheapest shipping option; the
+  scorers use `scoring.base.shipping()`, which falls back to `shipping_estimate` when it's None.
+  No buyer fee on eBay.de. `offsite_ignored` skips `offsite` for Kleinanzeigen and eBay.
+- Item details: `get_item_by_legacy_id`. Description = `localizedAspects` as "Name: value" lines
+  (skipping "Maximaler ...") + the HTML description as text. OUT_OF_STOCK or a past `itemEndDate`
+  = sold; 404 / errors 11001, 11003 = gone; anything else (11006: listing with variations) = can't tell.
+- `SetupError` (no keys, a 400 for a filter): the runner skips that site for the search without
+  marking it blocked. 429 (daily quota of 5000) is a `BlockedError`.
 
 ## Spec parsing rules (`specs.py`)
 

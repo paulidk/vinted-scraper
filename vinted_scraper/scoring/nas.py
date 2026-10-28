@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score
+from .base import Score, offsite_ignored, shipping
 from .drives import parse_size
 from .specs import DEFECT, NO_PSU, OFFSITE
 
@@ -174,7 +174,7 @@ class NasScorer:
 
     def score(self, listing: Listing) -> Score:
         nas = parse_nas(listing.title, listing.description)
-        cost = listing.effective_price + self.shipping_estimate + (self.no_psu_penalty if nas.no_psu else 0)
+        cost = listing.effective_price + shipping(listing, self.shipping_estimate) + (self.no_psu_penalty if nas.no_psu else 0)
         cost = round(cost, 2)
         summary = nas.summary()
 
@@ -182,8 +182,8 @@ class NasScorer:
             return Score(0, cost, summary, reject=reason, needs_details=needs_details)
 
         for flag in ("offsite", "defect", "accessory"):
-            if flag == "offsite" and "kleinanzeigen." in listing.url:
-                continue
+            if flag == "offsite" and offsite_ignored(listing):
+                continue  # only Vinted has a checkout of its own
             if flag == "accessory" and nas.made_for and flag in self.reject:
                 return rejected(flag)
             if flag in self.reject and getattr(nas, flag) and not (flag == "accessory" and nas.model and nas.bays):

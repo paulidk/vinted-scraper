@@ -83,6 +83,11 @@ class BlockedError(RuntimeError):
     """Raised when Vinted/Cloudflare keeps refusing requests."""
 
 
+class SetupError(RuntimeError):
+    """A site can't be searched as configured (no API key, a filter it rejects). Unlike a block,
+    the run goes on without that site and the podium still updates."""
+
+
 def params_from_url(url: str) -> tuple[str, dict[str, str]]:
     """Turn a Vinted search URL copied from the browser into (domain, API params)."""
     parsed = urlparse(url)
@@ -226,6 +231,7 @@ class ClientSettings:
     max_delay: float = 6.0
     max_retries: int = 5
     timeout: float = 30.0
+    ebay: dict = field(default_factory=dict)  # Browse API keys: client_id, client_secret; zip for shipping costs
 
 
 class VintedClient:

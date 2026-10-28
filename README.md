@@ -1,6 +1,6 @@
 # vinted-scraper
 
-Watches Vinted (and Kleinanzeigen.de) searches every 30 minutes, scores each listing by **value for money**, and
+Watches Vinted (and Kleinanzeigen.de and eBay) searches every 30 minutes, scores each listing by **value for money**, and
 notifies you (console / Discord / Telegram / ntfy / webhook) about the best new deals and
 price drops.
 
@@ -120,6 +120,49 @@ there only (its filters may then go in `params`).
 
 ```bash
 python -m vinted_scraper probe "https://www.kleinanzeigen.de/s-pcs/anzeige:angebote/versand:ja/c228"
+```
+
+## eBay
+
+eBay is searched through its official **Browse API**, not by scraping, so there's no Cloudflare and
+no blocking. It needs free API keys:
+
+1. Sign up at [developer.ebay.com](https://developer.ebay.com) (your normal eBay account works) and
+   open **Application Keys**.
+2. Create a **Production** keyset. eBay asks you to either set up a notification endpoint for
+   account deletions or opt out of it; this tool stores no eBay user data, so opt out.
+3. Put the **App ID** and **Cert ID** in `.env` (or the web UI's General tab):
+
+   ```
+   EBAY_CLIENT_ID=YourName-scraper-PRD-...
+   EBAY_CLIENT_SECRET=PRD-...
+   ```
+
+Then add `ebay` to a search's `sites`. Its filters go in `ebay:`:
+
+```yaml
+- name: sodimm-ram
+  sites: [vinted, kleinanzeigen, ebay]
+  queries: [ddr4 sodimm, so-dimm ddr4]
+  kleinanzeigen: {shipping: true}
+  ebay: {condition: used}       # category, condition (used/new), seller (privat/gewerblich), auctions, order
+```
+
+- Only "Sofort-Kaufen" (Buy It Now) listings, Best Offer ("Preisvorschlag") ones included, from
+  sellers in Germany who ship to Germany, newest first. `auctions: true` adds auctions, ranked by
+  the current bid, which is rarely the final price. `country: ""` includes sellers abroad.
+- eBay returns each listing's **shipping cost**, which replaces the scorer's `shipping_estimate`.
+  Set `client.ebay.zip` to your postcode to also get costs that depend on the distance.
+  eBay.de charges buyers no fee.
+- The item specifics (Prozessor, Arbeitsspeichergröße, Kapazität, ...) are read along with the
+  description, so vague titles usually still score correctly.
+- Search URLs from the browser work too (`https://www.ebay.de/sch/i.html?_nkw=optiplex&_udhi=150`):
+  the search text, category, price range, condition and auction filter are taken over.
+- The API allows 5000 calls a day, about one per search term and run. Without keys, eBay is skipped
+  with an error in the log and the other sites run as usual.
+
+```bash
+python -m vinted_scraper probe "https://www.ebay.de/sch/i.html?_nkw=optiplex+micro&LH_BIN=1"
 ```
 
 ## Schedule

@@ -6,6 +6,18 @@ from typing import Protocol
 from ..models import Listing
 
 
+def shipping(listing: Listing, estimate: float) -> float:
+    """The listing's own shipping cost when the site says (eBay), else the search's estimate."""
+    return estimate if listing.shipping is None else listing.shipping
+
+
+def offsite_ignored(listing: Listing) -> bool:
+    """`offsite` (pay outside the site) only means something on Vinted: PayPal is the normal way to
+    pay on Kleinanzeigen, and eBay descriptions still list payment methods from before eBay took
+    over payments, while the checkout always goes through eBay."""
+    return "kleinanzeigen." in listing.url or "ebay." in listing.url
+
+
 @dataclass
 class Score:
     points: float  # how "good" the item is, independent of price

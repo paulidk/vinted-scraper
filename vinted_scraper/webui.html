@@ -163,18 +163,20 @@ function normalize(c) {
     if (s.query !== undefined) { s.queries = [s.query, ...(s.queries || [])]; delete s.query; }
     if (s.url !== undefined) { s.urls = [s.url, ...(s.urls || [])]; delete s.url; }
     if (s.site !== undefined) { s.sites = [s.site]; delete s.site; }
-    // a Kleinanzeigen-only search may keep its filters in params; the form always uses `kleinanzeigen`
-    if (String(s.sites) === "kleinanzeigen" && s.params && !s.kleinanzeigen) { s.kleinanzeigen = s.params; delete s.params; }
+    // a Kleinanzeigen- or eBay-only search may keep its filters in params; the form always uses the site's own key
+    for (const site of ["kleinanzeigen", "ebay"])
+      if (String(s.sites) === site && s.params && !s[site]) { s[site] = s.params; delete s.params; }
     s.scorer = s.scorer || { type: "rules" };
   }
   c.notifiers = c.notifiers || [];
   return c;
 }
-const SITE_NAMES = { vinted: "Vinted", kleinanzeigen: "Kleinanzeigen" };
+const SITE_NAMES = { vinted: "Vinted", kleinanzeigen: "Kleinanzeigen", ebay: "eBay" };
+const siteOfUrl = (u) => (u.includes("kleinanzeigen.") ? "kleinanzeigen" : u.includes("ebay.") ? "ebay" : "vinted");
 function sitesOf(s) {
   if (s.sites?.length) return s.sites;
-  const urls = s.urls || [];
-  return urls.length && urls.every((u) => u.includes("kleinanzeigen.")) ? ["kleinanzeigen"] : ["vinted"];
+  const found = new Set((s.urls || []).map(siteOfUrl));
+  return found.size ? Object.keys(SITE_NAMES).filter((x) => found.has(x)) : ["vinted"];
 }
 async function api(path, body) {
   const res = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
@@ -394,7 +396,7 @@ function scoreTester(s) {
 
 // ---------------------------------------------------------------- tabs
 function searchCard(s, i, open) {
-  const sites = sitesOf(s), vinted = sites.includes("vinted"), ka = sites.includes("kleinanzeigen");
+  const sites = sitesOf(s), vinted = sites.includes("vinted"), ka = sites.includes("kleinanzeigen"), eb = sites.includes("ebay");
   const scorerBox = h("div");
   const summaryName = h("span", {}, s.name || "(unnamed)");
   const tag = h("span", { class: "tag" }, s.scorer.type || "rules");
@@ -425,17 +427,17 @@ function searchCard(s, i, open) {
     h("h3", {}, "What to search"),
     h("div", { class: "grid wide" },
       field(s, "name", "Name (unique)", { placeholder: "mini-pc", onchange: () => (summaryName.textContent = s.name || "(unnamed)") }),
-      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen"),
+      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen"), siteBox("ebay"),
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: s.enabled !== false, onchange: (e) => {
           if (e.target.checked) delete s.enabled; else s.enabled = false;
           offTag.hidden = e.target.checked; touch(); } }), "Enabled")),
       vinted ? field(s, "domain", "Vinted country site", { list: "domains", placeholder: cfg.client?.domain || "www.vinted.de", hint: "Leave empty to use the default from General" }) : null,
       field(s, "queries", "Search terms (one per line)", { type: "lines", placeholder: "optiplex micro\nthinkcentre tiny", full: true,
-        hint: (vinted && ka ? "Each term runs on Vinted, then on Kleinanzeigen; all results are ranked together. " : "")
+        hint: (sites.length > 1 ? `Each term runs on ${sites.map((x) => SITE_NAMES[x]).join(", then on ")}; all results are ranked together. ` : "")
           + (ka ? "Leave empty to take the whole Kleinanzeigen category." : "") }),
       field(s, "urls", "…or search URLs copied from your browser, filters included (one per line)", { type: "lines", rows: 2, full: true,
         placeholder: ka && !vinted ? "https://www.kleinanzeigen.de/s-pcs/halle/optiplex/k0c228l2409r50" : "https://www.vinted.de/catalog?search_text=optiplex&price_to=150",
-        hint: ka ? "Vinted or Kleinanzeigen URLs. Kleinanzeigen puts your town and radius in the URL" : "" })),
+        hint: ka || eb ? "Vinted, Kleinanzeigen or eBay URLs. Kleinanzeigen puts your town and radius in the URL" : "" })),
     h("h3", {}, "Filters"),
     h("div", { class: "grid" },
       field(s, "min_price", "Min price", { type: "number" }),
@@ -447,8 +449,15 @@ function searchCard(s, i, open) {
         field(obj(s, "kleinanzeigen"), "seller", "Kleinanzeigen: sellers", { type: "select", default: "", options: [["", "All"], ["privat", "Private only"], ["gewerblich", "Commercial only"]] }),
         h("div", { class: "row" }, check(obj(s, "kleinanzeigen"), "shipping", "Kleinanzeigen: only with shipping", false)),
       ] : []),
+      ...(eb ? [
+        field(obj(s, "ebay"), "category", "eBay: category ID", { type: "number", placeholder: "all", hint: "the number after /sch/ or _sacat= in an eBay search URL" }),
+        field(obj(s, "ebay"), "condition", "eBay: condition", { type: "select", default: "", options: [["", "Any"], ["used", "Used"], ["new", "New"]] }),
+        field(obj(s, "ebay"), "seller", "eBay: sellers", { type: "select", default: "", options: [["", "All"], ["privat", "Private only"], ["gewerblich", "Commercial only"]] }),
+        field(obj(s, "ebay"), "order", "eBay: sort results by", { type: "select", default: "", options: [["", "Newest first"], ["relevance", "Best match"]] }),
+        h("div", { class: "row" }, check(obj(s, "ebay"), "auctions", "eBay: include auctions (the current bid isn't the final price)", false)),
+      ] : []),
       field(s, "interval_minutes", "Check every (minutes)", { type: "number", placeholder: String(cfg.interval_minutes || 30), hint: "empty = the default from General" }),
-      field(s, "pages", "Max result pages per term", { type: "number", placeholder: "5", hint: "96 per page on Vinted, 25 on Kleinanzeigen; fetched in full once, then only until known listings" }),
+      field(s, "pages", "Max result pages per term", { type: "number", placeholder: "5", hint: "96 per page on Vinted, 25 on Kleinanzeigen, 100 on eBay; fetched in full once, then only until known listings" }),
       field(s, "fetch_details", "Descriptions to fetch per run", { type: "number", placeholder: "0", hint: "for listings with vague titles" }),
       field(s, "include", "Title must match (regex)", { placeholder: "optiplex|thinkcentre" }),
       field(s, "exclude", "Skip if matches (regex)", { placeholder: "\\b(monitor|keyboard)\\b" })),
@@ -515,7 +524,13 @@ function generalTab() {
       field(client, "max_retries", "Retries before giving up", { type: "number", placeholder: "5" }),
       field(client, "timeout", "Request timeout (s)", { type: "number", placeholder: "30" }),
       field(client, "impersonate", "Browser fingerprints to rotate (one per line)", { type: "lines", rows: 5, placeholder: "chrome\nchrome131\nchrome124\nedge101\nsafari17_0" }),
-      field(client, "proxies", "Proxies (one per line, optional)", { type: "lines", rows: 5, placeholder: "http://user:pass@host:port", hint: "Only needed if your IP gets blocked. Residential proxies work best." })))];
+      field(client, "proxies", "Proxies (one per line, optional)", { type: "lines", rows: 5, placeholder: "http://user:pass@host:port", hint: "Only needed if your IP gets blocked. Residential proxies work best." })),
+    h("h3", {}, "eBay API"),
+    h("p", { class: "muted" }, "eBay is searched through its official Browse API. Create a free account at developer.ebay.com and copy the Production keyset's App ID and Cert ID. Empty fields fall back to EBAY_CLIENT_ID / EBAY_CLIENT_SECRET in the environment."),
+    h("div", { class: "grid wide" },
+      field(obj(client, "ebay"), "client_id", "App ID (Client ID)", { placeholder: "${EBAY_CLIENT_ID}", secret: !String(client.ebay?.client_id || "").startsWith("${") }),
+      field(obj(client, "ebay"), "client_secret", "Cert ID (Client Secret)", { placeholder: "${EBAY_CLIENT_SECRET}", secret: !String(client.ebay?.client_secret || "").startsWith("${") }),
+      field(obj(client, "ebay"), "zip", "Your postcode", { placeholder: "06112", hint: "optional: eBay then returns shipping costs that depend on the distance" })))];
 }
 
 function yamlTab() {

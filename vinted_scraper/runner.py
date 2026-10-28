@@ -7,7 +7,7 @@ import random
 import time
 from urllib.parse import urlparse
 
-from .client import BlockedError, ClientSettings, VintedClient
+from .client import BlockedError, ClientSettings, SetupError, VintedClient
 from .config import Config, SearchConfig
 from .models import Listing
 from .notify import Deal, Podium, build_notifiers
@@ -19,9 +19,12 @@ log = logging.getLogger(__name__)
 
 
 def make_client(settings: ClientSettings) -> VintedClient:
+    from .ebay import EbayClient, is_ebay
     from .kleinanzeigen import KleinanzeigenClient, is_kleinanzeigen
 
-    return KleinanzeigenClient(settings) if is_kleinanzeigen(settings.domain) else VintedClient(settings)
+    if is_kleinanzeigen(settings.domain):
+        return KleinanzeigenClient(settings)
+    return EbayClient(settings) if is_ebay(settings.domain) else VintedClient(settings)
 
 
 class Runner:
@@ -79,6 +82,11 @@ class Runner:
                 log.error("[%s] blocked on %s %s, skipping the rest of this site this run: %s",
                           search.name, domain, params.get("search_text") or params, exc)
                 self._blocked.add(search.name)
+                blocked.add(domain)
+                continue
+            except SetupError as exc:
+                # No API key, or a filter the site rejects: not a block, so the podium still updates.
+                log.error("[%s] skipping %s: %s", search.name, domain, exc)
                 blocked.add(domain)
                 continue
             if full:
