@@ -8,10 +8,11 @@ from urllib.parse import urlparse
 
 import yaml
 
+from . import ebay
 from .client import ClientSettings, params_from_url
 from .kleinanzeigen import DOMAIN as KLEINANZEIGEN, is_kleinanzeigen
 
-SITES = {"vinted", "kleinanzeigen"}
+SITES = ("vinted", "kleinanzeigen", "ebay")
 
 _ENV = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
 
@@ -107,42 +108,55 @@ def _quiet_hours(raw) -> tuple[int, int] | None:
     return (start, end) if start != end else None
 
 
-def _search(raw: dict, default_domain: str) -> SearchConfig:
-    """Search terms run on every site in `sites`, so one search ranks Vinted and Kleinanzeigen together.
+def site_of(url: str) -> str:
+    return "kleinanzeigen" if is_kleinanzeigen(url) else "ebay" if ebay.is_ebay(url) else "vinted"
 
-    `params` are Vinted's (`catalog_ids`, `order`, ...) and `kleinanzeigen` holds Kleinanzeigen's
-    (`category`, `shipping`, `seller`, ...). A search on Kleinanzeigen alone may put them in `params`.
+
+def _search(raw: dict, default_domain: str) -> SearchConfig:
+    """Search terms run on every site in `sites`, so one search ranks all of them together.
+
+    `params` are Vinted's (`catalog_ids`, `order`, ...), `kleinanzeigen` holds Kleinanzeigen's
+    (`category`, `shipping`, `seller`, ...) and `ebay` eBay's (`category`, `seller`, `auctions`,
+    `country`, `conditions`). A search on a single site may put its filters in `params`.
     """
     urls = [raw["url"]] if "url" in raw else raw.get("urls", [])
-    url_sites = {"kleinanzeigen" if is_kleinanzeigen(u) else "vinted" for u in urls}
+    url_sites = {site_of(u) for u in urls}
     if "sites" in raw or "site" in raw:
         sites = list(raw.get("sites") or [raw["site"]])
     else:
-        sites = sorted(url_sites) or ["vinted"]
+        sites = [s for s in SITES if s in url_sites] or ["vinted"]
     for site in sites:
         if site not in SITES:
-            raise ValueError(f"search {raw.get('name')!r}: unknown site {site!r}; choose from {sorted(SITES)}")
+            raise ValueError(f"search {raw.get('name')!r}: unknown site {site!r}; choose from {list(SITES)}")
     vinted_domain = raw.get("domain") or default_domain
-    only_ka = sites == ["kleinanzeigen"]
-    bases = {
-        "vinted": ({} if only_ka else dict(raw.get("params") or {}), vinted_domain),
-        "kleinanzeigen": (dict(raw.get("kleinanzeigen") or (raw.get("params") if only_ka else None) or {}), KLEINANZEIGEN),
-    }
+    only = sites[0] if len(sites) == 1 else None
+
+    def filters(site: str) -> dict:
+        if site == "vinted":
+            return dict(raw.get("params") or {}) if only in (None, "vinted") else {}
+        return dict(raw.get(site) or (raw.get("params") if only == site else None) or {})
+
+    bases = {"vinted": (filters("vinted"), vinted_domain), "kleinanzeigen": (filters("kleinanzeigen"), KLEINANZEIGEN),
+             "ebay": (filters("ebay"), ebay.DOMAIN)}
     queries: list[dict] = []
     for url in urls:
-        if is_kleinanzeigen(url):
+        site, netloc = site_of(url), urlparse(url).netloc
+        if site == "kleinanzeigen":
             # Kleinanzeigen keeps its filters in the path: keep it whole and only add the page.
-            base, _ = bases["kleinanzeigen"]
-            queries.append({**base, "path": urlparse(url).path, "domain": urlparse(url).netloc or KLEINANZEIGEN})
-            continue
-        url_domain, params = params_from_url(url)
-        queries.append({**bases["vinted"][0], **params, "domain": url_domain or vinted_domain})
+            queries.append({**bases[site][0], "path": urlparse(url).path, "domain": netloc or KLEINANZEIGEN})
+        elif site == "ebay":
+            queries.append({**bases[site][0], **ebay.params_from_url(url), "domain": netloc or ebay.DOMAIN})
+        else:
+            url_domain, params = params_from_url(url)
+            queries.append({**bases[site][0], **params, "domain": url_domain or vinted_domain})
     texts = raw.get("queries") or ([raw["query"]] if "query" in raw else [])
-    for site in sites:  # in this order: Vinted first, then Kleinanzeigen
+    for site in sites:
         base, domain = bases[site]
         if texts:
             queries += [{**base, "search_text": text, "domain": domain} for text in texts]
         elif site not in url_sites:
+            if site == "ebay" and not base.get("category"):
+                raise ValueError(f"search {raw.get('name')!r}: eBay needs search terms or ebay.category")
             queries.append({**base, "domain": domain})  # no terms: the whole (category) feed
     if raw.get("max_price") is not None:
         for q in queries:

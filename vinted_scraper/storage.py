@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS podium (
 """
 # Added after the first release; existing databases get them on open.
 COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL", "extra": "TEXT",
-           "partial": "INTEGER"}  # 1: description is only the snippet from search results
+           "partial": "INTEGER",  # 1: description is only the snippet from search results
+           "shipping": "REAL"}  # quoted shipping cost (eBay), NULL: unknown
 
 
 @dataclass
@@ -78,7 +79,7 @@ def listing_from_row(row: sqlite3.Row) -> Listing:
         id=row["id"], title=row["title"] or "", price=row["price"], currency=row["currency"] or "EUR",
         url=row["url"] or "", total_price=total, brand=row["brand"] or "",
         condition=row["condition"] or "", photo=row["photo"] or "", description=row["description"] or "",
-        extra=row["extra"] or "", partial_description=bool(row["partial"]),
+        extra=row["extra"] or "", partial_description=bool(row["partial"]), shipping=row["shipping"],
     )
 
 
@@ -114,8 +115,8 @@ class Store:
         self.db.execute(
             """INSERT INTO items (search, id, title, price, currency, cost, points, value, summary, url, photo,
                                   description, reject, first_seen, last_seen, total_price, brand, condition, extra,
-                                  partial)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                  partial, shipping)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT (search, id) DO UPDATE SET
                  title=excluded.title, price=excluded.price, cost=excluded.cost, points=excluded.points,
                  value=excluded.value, summary=excluded.summary, photo=excluded.photo,
@@ -124,12 +125,13 @@ class Store:
                  partial=CASE WHEN length(excluded.description) >= length(COALESCE(items.description, ''))
                               THEN excluded.partial ELSE items.partial END,
                  reject=excluded.reject, last_seen=excluded.last_seen, total_price=excluded.total_price,
-                 brand=excluded.brand, condition=excluded.condition, extra=excluded.extra, gone=NULL""",
+                 brand=excluded.brand, condition=excluded.condition, extra=excluded.extra,
+                 shipping=excluded.shipping, gone=NULL""",
             (search, listing.id, listing.title, listing.price, listing.currency, score.cost, score.points,
              score.value, score.summary, listing.url, listing.photo, listing.description, score.reject, now, now,
              # Never NULL for new rows: NULL marks rows stored before the column existed.
              listing.total_price or listing.price, listing.brand, listing.condition, listing.extra,
-             int(listing.partial_description)),
+             int(listing.partial_description), listing.shipping),
         )
 
     def rows(self, search: str, max_age_hours: float | None = None) -> list[sqlite3.Row]:

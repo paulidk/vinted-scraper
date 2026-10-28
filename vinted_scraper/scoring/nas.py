@@ -12,7 +12,7 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score
+from .base import Score, offsite_matters
 from .drives import parse_size
 from .specs import DEFECT, NO_PSU, OFFSITE
 
@@ -174,7 +174,7 @@ class NasScorer:
 
     def score(self, listing: Listing) -> Score:
         nas = parse_nas(listing.title, listing.description)
-        cost = listing.effective_price + self.shipping_estimate + (self.no_psu_penalty if nas.no_psu else 0)
+        cost = listing.effective_price + listing.shipping_or(self.shipping_estimate) + (self.no_psu_penalty if nas.no_psu else 0)
         cost = round(cost, 2)
         summary = nas.summary()
 
@@ -182,7 +182,7 @@ class NasScorer:
             return Score(0, cost, summary, reject=reason, needs_details=needs_details)
 
         for flag in ("offsite", "defect", "accessory"):
-            if flag == "offsite" and "kleinanzeigen." in listing.url:
+            if flag == "offsite" and not offsite_matters(listing.url):
                 continue
             if flag == "accessory" and nas.made_for and flag in self.reject:
                 return rejected(flag)

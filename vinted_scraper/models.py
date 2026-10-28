@@ -32,12 +32,16 @@ class Listing:
     description: str = ""
     partial_description: bool = False  # only the start, as in Kleinanzeigen search results
     extra: str = ""  # site-specific notes for alerts: "06112 Halle · nur Abholung · VB"
+    shipping: float | None = None  # shipping cost the site quotes (eBay); None: scorers use their estimate
     raw: dict = field(default_factory=dict, repr=False)
 
     @property
     def effective_price(self) -> float:
         """Price incl. buyer protection fee when Vinted tells us, never below 1."""
         return max(self.total_price or self.price, 1.0)
+
+    def shipping_or(self, estimate: float) -> float:
+        return estimate if self.shipping is None else self.shipping
 
     @property
     def text(self) -> str:
@@ -63,5 +67,6 @@ class Listing:
             description=item.get("description") or "",
             partial_description=bool(item.get("description_partial")),
             extra=item.get("extra") or "",
+            shipping=_money(item.get("shipping")),
             raw=item,
         )

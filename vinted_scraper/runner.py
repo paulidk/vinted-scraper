@@ -19,8 +19,11 @@ log = logging.getLogger(__name__)
 
 
 def make_client(settings: ClientSettings) -> VintedClient:
+    from .ebay import EbayClient, is_ebay
     from .kleinanzeigen import KleinanzeigenClient, is_kleinanzeigen
 
+    if is_ebay(settings.domain):
+        return EbayClient(settings)
     return KleinanzeigenClient(settings) if is_kleinanzeigen(settings.domain) else VintedClient(settings)
 
 

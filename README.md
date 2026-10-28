@@ -1,6 +1,6 @@
 # vinted-scraper
 
-Watches Vinted (and Kleinanzeigen.de) searches every 30 minutes, scores each listing by **value for money**, and
+Watches Vinted (and Kleinanzeigen.de and eBay) searches every 30 minutes, scores each listing by **value for money**, and
 notifies you (console / Discord / Telegram / ntfy / webhook) about the best new deals and
 price drops.
 
@@ -121,6 +121,66 @@ there only (its filters may then go in `params`).
 ```bash
 python -m vinted_scraper probe "https://www.kleinanzeigen.de/s-pcs/anzeige:angebote/versand:ja/c228"
 ```
+
+## eBay
+
+eBay is searched through its official Browse API, not by scraping its pages, so there's no
+Cloudflare to fight, but you need a free API key pair first.
+
+### Getting the API keys
+
+1. Sign up at <https://developer.ebay.com> ("Join"). Use your normal eBay account or create one.
+   The developer account needs approval, which usually takes a few minutes, up to a day.
+2. Open **Hi (your name) → Application Keys** (<https://developer.ebay.com/my/keys>), enter an
+   application title (e.g. `deal-watcher`) and click **Create a keyset** under **Production**,
+   not Sandbox (the sandbox has only test listings).
+3. eBay then asks about **Marketplace Account Deletion notifications**. This app stores no eBay
+   user data, so choose **"I do not persist eBay data" → Exempted from Marketplace Account
+   Deletion**, give a short reason ("only reads public listings, stores no user data") and confirm.
+   The keyset stays disabled until this is done.
+4. Copy the production **App ID (Client ID)** and **Cert ID (Client Secret)**. The Dev ID isn't needed.
+5. Put them in the config, in the web UI under **General**, or in `config.yaml`:
+
+   ```yaml
+   client:
+     ebay_client_id: YourName-dealwatc-PRD-1a2b3c4d5-6e7f8a9b
+     ebay_client_secret: PRD-1a2b3c4d5e6f-...
+   ```
+
+   `${EBAY_CLIENT_ID}` / `${EBAY_CLIENT_SECRET}` work too, as do those environment variables
+   without any config entry. Keep the secret out of git (`config.yaml` is ignored).
+6. Test it: `python -m vinted_scraper probe "https://www.ebay.de/sch/i.html?_nkw=optiplex+micro&_sacat=179"`
+
+The default limit is 5,000 API calls a day. One call returns 100 listings, so even 30 terms
+every 20 minutes stay far below it.
+
+### Searching eBay
+
+Add `ebay` to `sites`; its filters go under `ebay`:
+
+```yaml
+- name: mini-pc
+  sites: [vinted, kleinanzeigen, ebay]
+  queries: [optiplex micro, thinkcentre m920q, elitedesk mini]
+  ebay: {category: 179}     # PC Desktops & All-in-Ones (mini PCs included)
+```
+
+- `category`: 179 desktop & mini PCs, 11211 servers, 170083 RAM, 56083 internal drives, 106273 NAS
+  (the number after `/sch/` or `_sacat=` in eBay URLs). Without search terms the search takes the
+  whole category.
+- `seller: privat` / `gewerblich` keeps only private or commercial sellers.
+- `country`: where the item is, default `DE`; `any` for anything that ships to Germany.
+- `auctions: true` includes auctions. They're off by default: every bid would change the price and
+  trigger a "price up" alert.
+- `conditions`: eBay condition ids separated by `|`; by default everything but "for parts or not
+  working" and "new with defects". `all` = no filter.
+- Search URLs from the browser work too (`_nkw`, `_sacat`, `_udlo`/`_udhi` are read).
+
+Only listings that ship to Germany are returned, and the quoted shipping cost replaces the
+scorer's `shipping_estimate`. Descriptions are fetched through the API when specs are missing, and
+the podium check reads the current price and whether the listing has ended. Alerts show location,
+shipping, "Preisvorschlag" (best offer) and "gewerblich". The `offsite` check is skipped, because
+payment always runs through eBay. eBay ids are stored with an offset (2·10^15).
 
 ## Schedule
 

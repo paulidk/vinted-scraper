@@ -226,6 +226,10 @@ class ClientSettings:
     max_delay: float = 6.0
     max_retries: int = 5
     timeout: float = 30.0
+    # eBay's API keys (developer.ebay.com, production "App ID" and "Cert ID"); EBAY_CLIENT_ID /
+    # EBAY_CLIENT_SECRET in the environment work too
+    ebay_client_id: str = ""
+    ebay_client_secret: str = ""
 
 
 class VintedClient:

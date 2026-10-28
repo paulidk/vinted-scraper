@@ -47,6 +47,7 @@ nothing. Start there when scraping breaks.
 |---|---|
 | `vinted_scraper/client.py` | curl_cffi HTTP client, Cloudflare handling, catalog-page and item-page parsing |
 | `vinted_scraper/kleinanzeigen.py` | Kleinanzeigen client: search paths, Astro island parsing, listing page (description, reserved/deleted) |
+| `vinted_scraper/ebay.py` | eBay client on the official Browse API (OAuth app token), search filters, `getItem` for description/ended/price |
 | `vinted_scraper/models.py` | `Listing` built from a normalized item dict |
 | `vinted_scraper/scoring/cpu_db.py` | ~380 CPUs (mini PC, desktop, Xeon, EPYC) → approx. PassMark + TDP, estimation for unknown models |
 | `vinted_scraper/scoring/gpu_db.py` | ~120 graphics cards → approx. G3D Mark, idle watts |
@@ -115,6 +116,23 @@ main site, so queries crawled before multi-site support aren't crawled deep agai
 - PayPal is normal there, hence the scorer skips `offsite` for Kleinanzeigen listings.
 - The user's config: mini-pc (14 terms), desktops (Vinted category 3581 + Kleinanzeigen 228) and
   servers (13 terms incl. workstations), all on both sites, Kleinanzeigen with `shipping: true`.
+
+## eBay (`ebay.py`)
+
+Third source, `sites: [..., ebay]`, filters under `ebay:` (`category`, `seller`, `country`, `auctions`,
+`conditions`). Uses the Browse API (`api.ebay.com/buy/browse/v1`), not the website: www.ebay.de answers
+scripts with 403. Keys: `client.ebay_client_id` / `ebay_client_secret` or `EBAY_CLIENT_ID` /
+`EBAY_CLIENT_SECRET`; missing or rejected keys are logged once and the site is skipped (not a block, so
+podiums still update). 429 = daily call limit -> `BlockedError`. Search: `sort=newlyListed`, 100 per
+page, `deliveryCountry:DE` + `itemLocationCountry:DE` by default, fixed price/best offer only, no
+"for parts" condition. Ids are `ID_OFFSET` (2·10^15) + legacy item id; URLs are rebuilt as
+`www.ebay.de/itm/<id>` without tracking params, so `client_for` finds the client by host.
+`Listing.shipping` (stored column `shipping`) is the quoted cost and replaces `shipping_estimate` in
+every scorer (`Listing.shipping_or`). `scoring.base.offsite_matters` skips `offsite` for Kleinanzeigen
+and eBay. Category ids were checked on ebay.de 2026-10-28: 179 PC Desktops & All-in-Ones, 11211
+Computerserver, 170083 Arbeitsspeicher, 56083 Interne Festplatten, 106273 Netzgebundener Speicher.
+The API code is tested against fake responses only, built from eBay's documented format; the
+first live check needs the user's keys (`probe` with an ebay.de search URL).
 
 ## Spec parsing rules (`specs.py`)
 

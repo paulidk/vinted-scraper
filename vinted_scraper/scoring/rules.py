@@ -54,4 +54,4 @@ class RulesScorer:
         hits = [(rule.match.pattern, pts) for rule in self.rules if (pts := rule.apply(listing))]
         points = max(self.base + sum(p for _, p in hits), 0.0)
         summary = ", ".join(f"{pat} {p:+g}" for pat, p in hits) or "no rule matched"
-        return Score(points=points, cost=listing.effective_price + self.shipping_estimate, summary=summary)
+        return Score(points=points, cost=listing.effective_price + listing.shipping_or(self.shipping_estimate), summary=summary)

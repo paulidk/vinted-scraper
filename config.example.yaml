@@ -14,6 +14,10 @@ client:
   # Optional, only needed if your IP gets blocked. Residential proxies work best.
   proxies: []
   #  - http://user:pass@proxy-host:port
+  # eBay Browse API keys (production App ID + Cert ID from developer.ebay.com, see README), only
+  # for searches with `ebay` in `sites`. EBAY_CLIENT_ID / EBAY_CLIENT_SECRET work without these lines.
+  # ebay_client_id: ${EBAY_CLIENT_ID}
+  # ebay_client_secret: ${EBAY_CLIENT_SECRET}
 
 notifiers:
   - type: console
@@ -32,9 +36,10 @@ searches:
   - name: mini-pc
     interval_minutes: 20    # the main target and fastest to sell: check more often than the default
     # Every search term runs on each site listed here, Vinted first, and all results are ranked
-    # together (one top 3). `params` are Vinted's filters, `kleinanzeigen` Kleinanzeigen's.
-    # sites: [vinted, kleinanzeigen]
+    # together (one top 3). `params` are Vinted's filters, `kleinanzeigen` Kleinanzeigen's, `ebay` eBay's.
+    # sites: [vinted, kleinanzeigen, ebay]
     # kleinanzeigen: {category: 228, shipping: true}   # 228 = PCs; most others are pickup only
+    # ebay: {category: 179}                            # PC Desktops & All-in-Ones
     queries:
       - optiplex micro
       - thinkcentre tiny
@@ -150,6 +155,16 @@ searches:
   # `shipping: true`, or paste a search URL with your town and radius in it:
   #   url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50"
   # `offsite` (pay outside Vinted) is ignored for Kleinanzeigen listings: PayPal is normal there.
+
+  # ------------------------------------------- eBay (needs API keys, see client: above and README)
+  # Add `ebay` to `sites` in any search, or search it alone with `site: ebay`. Filters under `ebay`:
+  #   category: 179           # 179 desktop & mini PCs, 11211 servers, 170083 RAM, 56083 internal drives, 106273 NAS
+  #   seller: privat          # or gewerblich
+  #   country: DE             # where the item is (default); `any` = anything that ships to Germany
+  #   auctions: false         # true includes auctions (each bid changes the price)
+  #   conditions: "3000"      # eBay condition ids (3000 = used); default: all but "for parts"
+  # Without search terms it takes the whole category. The quoted shipping cost replaces
+  # `shipping_estimate`, and `offsite` is ignored (payment always runs through eBay).
 
   # ------------------------------------------- RAM upgrades: GB per 100 €
   # Reads kits ("32GB (2x16GB)", "2 × 8 GB", "Lot de 2 barrettes 8 Go"), DDR generation, SO-DIMM vs.

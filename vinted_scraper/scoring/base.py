@@ -20,6 +20,14 @@ class Score:
         return 0.0 if self.reject else round(100 * self.points / max(self.cost, 1.0), 2)
 
 
+def offsite_matters(url: str) -> bool:
+    """Talk of PayPal or bank transfer is a scam sign only on Vinted, which has its own checkout.
+
+    On Kleinanzeigen PayPal is the normal way to pay; on eBay payment always runs through eBay.
+    """
+    return not any(site in url for site in ("kleinanzeigen.", "ebay."))
+
+
 class Scorer(Protocol):
     def score(self, listing: Listing) -> Score: ...
 

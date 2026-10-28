@@ -10,7 +10,7 @@ Every weight can be changed per search in the config file.
 from __future__ import annotations
 
 from ..models import Listing
-from .base import Score
+from .base import Score, offsite_matters
 from .specs import parse_specs
 
 DEFAULT_WEIGHTS = {
@@ -80,12 +80,12 @@ class ComputerScorer:
     def score(self, listing: Listing) -> Score:
         specs = parse_specs(listing.text, self.cpu_overrides, title=listing.title, gpu_overrides=self.gpu_overrides)
         w = self.w
-        cost = listing.effective_price + self.shipping_estimate
+        cost = listing.effective_price + listing.shipping_or(self.shipping_estimate)
         summary = specs.summary()
 
         for flag in ("offsite", "defect", "lot", "cpu_only", "barebone", "no_psu"):
-            if flag == "offsite" and "kleinanzeigen." in listing.url:
-                continue  # paying by PayPal is normal there; only Vinted has its own checkout
+            if flag == "offsite" and not offsite_matters(listing.url):
+                continue
             if flag in self.reject and getattr(specs, flag):
                 return Score(0, cost, summary, reject=flag)
         if self.require_cpu and not specs.cpu:

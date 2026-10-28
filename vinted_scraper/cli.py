@@ -4,8 +4,10 @@ import argparse
 import json
 import logging
 import sys
+from pathlib import Path
 from urllib.parse import urlparse
 
+from . import ebay
 from .client import ClientSettings, VintedClient, params_from_url
 from .config import load_config
 from .kleinanzeigen import KleinanzeigenClient, is_kleinanzeigen
@@ -46,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     ui = sub.add_parser("ui", help="web page for editing the config and browsing deals")
     ui.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 to reach it from other devices (exposes your tokens)")
     ui.add_argument("--port", type=int, default=8765)
-    probe = sub.add_parser("probe", help="fetch one Vinted or Kleinanzeigen search URL and print the results (connectivity check)")
+    probe = sub.add_parser("probe", help="fetch one Vinted, Kleinanzeigen or eBay search URL and print the results (connectivity check)")
     probe.add_argument("url")
 
     args = parser.parse_args(argv)
@@ -56,7 +58,14 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.command == "probe":
-        if is_kleinanzeigen(args.url):
+        if ebay.is_ebay(args.url):
+            # the API keys come from the config (or the environment)
+            settings = load_config(args.config).client if Path(args.config).exists() else ClientSettings()
+            client = ebay.EbayClient(ClientSettings(domain=urlparse(args.url).netloc or ebay.DOMAIN,
+                                               ebay_client_id=settings.ebay_client_id,
+                                               ebay_client_secret=settings.ebay_client_secret))
+            items = client.search(ebay.params_from_url(args.url), per_page=20)
+        elif is_kleinanzeigen(args.url):
             client = KleinanzeigenClient(ClientSettings(domain=urlparse(args.url).netloc, min_delay=1, max_delay=2))
             items = client.search({"path": urlparse(args.url).path})
         else:
@@ -129,8 +138,9 @@ def _diagnose(client: VintedClient) -> None:
     resp = client.last_response
     session = client._session
     print("\n--- diagnostics (paste this when reporting a problem) ---", file=sys.stderr)
-    print(f"curl_cffi impersonating: {client.settings.impersonate[client._fingerprint_idx]}", file=sys.stderr)
-    if session is not None:
+    if hasattr(client, "_fingerprint_idx"):
+        print(f"curl_cffi impersonating: {client.settings.impersonate[client._fingerprint_idx]}", file=sys.stderr)
+    if session is not None and hasattr(client, "_fingerprint_idx"):
         print(f"cookies: {sorted(session.cookies.keys())}", file=sys.stderr)
     if resp is None:
         print("no API response recorded", file=sys.stderr)
