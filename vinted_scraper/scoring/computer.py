@@ -10,8 +10,8 @@ Every weight can be changed per search in the config file.
 from __future__ import annotations
 
 from ..models import Listing
-from .base import Score, offsite_matters
-from .specs import parse_specs
+from .base import Score
+from .specs import parse_specs, payment_reject
 
 DEFAULT_WEIGHTS = {
     "cpu": 1.0,  # points per 1000 PassMark
@@ -83,9 +83,9 @@ class ComputerScorer:
         cost = listing.effective_price + listing.shipping_or(self.shipping_estimate)
         summary = specs.summary()
 
-        for flag in ("offsite", "defect", "lot", "cpu_only", "barebone", "no_psu"):
-            if flag == "offsite" and not offsite_matters(listing.url):
-                continue
+        if "offsite" in self.reject and (reason := payment_reject(listing)):
+            return Score(0, cost, summary, reject=reason)
+        for flag in ("defect", "lot", "cpu_only", "barebone", "no_psu"):
             if flag in self.reject and getattr(specs, flag):
                 return Score(0, cost, summary, reject=flag)
         if self.require_cpu and not specs.cpu:

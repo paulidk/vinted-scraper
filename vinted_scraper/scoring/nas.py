@@ -12,9 +12,9 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score, offsite_matters
+from .base import Score
 from .drives import parse_size
-from .specs import DEFECT, NO_PSU, OFFSITE
+from .specs import DEFECT, NO_PSU, OFFSITE, payment_reject
 
 # "DS437" alone is a Shuttle PC; Synology says its name or has a suffix (DS218+, DS216j)
 _SYNOLOGY_WORD = re.compile(r"\b(synology|diskstation|rackstation|dsm)\b")
@@ -181,9 +181,9 @@ class NasScorer:
         def rejected(reason: str, needs_details: bool = False) -> Score:
             return Score(0, cost, summary, reject=reason, needs_details=needs_details)
 
-        for flag in ("offsite", "defect", "accessory"):
-            if flag == "offsite" and not offsite_matters(listing.url):
-                continue
+        if "offsite" in self.reject and (reason := payment_reject(listing)):
+            return rejected(reason)
+        for flag in ("defect", "accessory"):
             if flag == "accessory" and nas.made_for and flag in self.reject:
                 return rejected(flag)
             if flag in self.reject and getattr(nas, flag) and not (flag == "accessory" and nas.model and nas.bays):

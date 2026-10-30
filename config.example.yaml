@@ -78,7 +78,7 @@ searches:
       min_ram_gb: 4
       assume_ram_gb: 8      # when the listing doesn't say
       reject: [defect, lot, cpu_only, offsite]  # cpu_only = a loose CPU/board/graphics card,
-                                                # offsite = asks to pay outside Vinted; also: barebone, no_psu
+                                                # offsite = PayPal F&F only, or pay outside Vinted; also: barebone, no_psu
       shipping_estimate: 6
       kwh_price: 0.32       # electricity cost per kWh ...
       years: 2              # ... over this many years of 24/7 use is added to the price
@@ -154,7 +154,8 @@ searches:
   # (228 PCs, 225 PC accessories, 278 notebooks). Most listings there are pickup only, so keep
   # `shipping: true`, or paste a search URL with your town and radius in it:
   #   url: "https://www.kleinanzeigen.de/s-pcs/halle/c228l2409r50"
-  # `offsite` (pay outside Vinted) is ignored for Kleinanzeigen listings: PayPal is normal there.
+  # PayPal is normal there, so `offsite` only rejects PayPal Friends & Family without a protected
+  # option ("Direkt kaufen", Käuferschutz, Waren und Dienstleistungen).
 
   # ------------------------------------------- eBay (needs API keys, see client: above and README)
   # Add `ebay` to `sites` in any search, or search it alone with `site: ebay`. Filters under `ebay`:

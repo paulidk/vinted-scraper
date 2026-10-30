@@ -61,6 +61,8 @@ def _normalize(ad: dict, base_url: str) -> dict:
         extra.append("VB")
     if ad.get("posterType") == "COMMERCIAL":
         extra.append("gewerblich")
+    if ad.get("buyNowEnabled"):
+        extra.append("Direkt kaufen")  # Kleinanzeigen's own checkout, with buyer protection
     return {
         "id": ID_OFFSET + int(ad["id"]),
         "title": ad.get("title") or "",

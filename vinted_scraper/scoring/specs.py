@@ -114,12 +114,65 @@ DISK = re.compile(r"\b(ssd|hdd|nvme|m\.?2|disk|disque|festplatte|\d+\s*(?:tb|to)
 BUNDLED = re.compile(r"\+|&|\b(mit|with|avec|con|und|et|inkl\w*|incl\w*)\b")
 RAM = re.compile(r"\b(ram|ddr\d|\d+\s*(?:gb|go)\b)")
 # Asking to pay outside Vinted (no buyer protection): the usual bait behind a too-good price.
-OFFSITE = re.compile(
+NOT_ON_VINTED = re.compile(
     r"(?:no|not|kein\w*|nicht|pas\s*de|niente|sin)\s*(?:payment|paiement|zahlung|bezahlung|pagamento|pago)?\s*"
     r"(?:by|via|über|ueber|par|sur|tramite|con|per)?\s*vinted"
+)
+OFFSITE = re.compile(
+    NOT_ON_VINTED.pattern +
     r"|\b(paypal|pay\s*pal|whats\s*app|telegram|western\s*union|überweisung|virement|bonifico|bank\s*transfer|"
     r"f&f|friends\s*(?:and|&)\s*family)\b"
 )
+# "PayPal Freunde", "PayPal (Freunde und Familie)", "Paypal(freunde)", "PayPal an Freunde", "nur F&F", ...
+FRIENDS_FAMILY = re.compile(
+    r"(?:paypal|pay\s*pal|\bpp)\W{0,5}(?:an\s+)?(?:friends?\b|freunde?\b|famil|privat\b|ff\b)"
+    r"|\bf\s*[&+]\s*f\b|\bfnf\b"
+    r"|\b(?:friends?|freunde?|amis|amici|vrienden|amigos)\W{0,3}(?:and|und|u\.?|et|e|en|y|oder)?\W{0,3}"
+    r"(?:famil|parenti|familiari)"
+    r"|\bfamil\w*\W{0,3}(?:und|and|&|\+)\W{0,3}(?:freunde?|friends?)\b"
+    r"|\bentre\s+proches\b"
+)
+# What the seller offers besides F&F that protects the buyer: the site's own checkout or PayPal
+# with buyer protection. "PayPal Freunde oder Käuferschutz bei Gebührenübernahme" is fine.
+SAFE_PAYMENT = re.compile(
+    r"waren?\W*(?:und|u\.?)?\W*dienstleistung|goods\s*(?:and|&|\+)?\s*services|\bg\s*&\s*s\b"
+    r"|k(?:ä|ae)uferschutz|buyer\s*protection|paypal\W{0,5}(?:business|gewerblich|gesch(?:ä|ae)ftlich)"
+    r"|(?:über|ueber|via|per|auf|by|through|sur|tramite)\s+vinted\b|vinted[\s-]*(?:kauf|checkout|zahlung|bezahl|payment)"
+    r"|\bin[\s-]*app\b|direkt\s*kaufen|sicher(?:es|e|)\s*bezahl"
+    r"|(?:zahl|bezahl|kauf|kaufen)\w*\W+(?:\w+\W+)?(?:über|ueber|via|per)\s+kleinanzeigen"
+    r"|(?:über|ueber|via|per)\s+kleinanzeigen\W+(?:\w+\W+)?(?:bezahl|kauf|kaufen)"
+    # Fees only come up with protected payment. "F&F, damit keine Gebühren anfallen" is negated below.
+    r"|übernahme\s+der\s+gebühr|gebühr\w*\s*(?:trägt|übernimmt|zahlt|gehen)|gebührenübernahme"
+)
+_NOT_BEFORE = re.compile(r"\b(?:kein\w*|nicht|ohne|no|not|never|niemals|sans|pas\s+de|niente|sin)[ \t]+(?:[\w&+-]+[ \t]+){0,2}$")
+_NOT_AFTER = re.compile(r"^\W*(?:ist\s+|wird\s+|sind\s+)?(?:nicht\b|nein\b|no\b|not\b|ausgeschlossen|entfällt|gibt\s+es\s+nicht)")
+
+
+def _offered(rx: re.Pattern, text: str) -> bool:
+    """Whether the pattern occurs without a negation: "kein PayPal F&F" doesn't offer F&F."""
+    return any(not _NOT_BEFORE.search(text[max(0, m.start() - 40):m.start()]) and not _NOT_AFTER.search(text[m.end():m.end() + 25])
+               for m in rx.finditer(text))
+
+
+def payment_reject(listing) -> str | None:
+    """Why the way this listing wants to be paid is unsafe, or None.
+
+    Friends & Family has no buyer protection: it's out on Vinted and Kleinanzeigen unless the
+    listing also offers the site's own checkout or PayPal with protection. eBay always takes the
+    payment itself. Vinted additionally treats any talk of paying elsewhere as a scam sign,
+    unless the listing also says it can be bought through Vinted.
+    """
+    if "ebay." in listing.url:
+        return None
+    text = listing.text.lower()
+    safe = "direkt kaufen" in listing.extra.lower() or _offered(SAFE_PAYMENT, text)
+    if not safe and _offered(FRIENDS_FAMILY, text):
+        return "paypal f&f"
+    if "kleinanzeigen." in listing.url or (safe and not NOT_ON_VINTED.search(text)):
+        return None
+    return "offsite" if OFFSITE.search(text) else None
+
+
 # One listing for several different machines ("Tiny PCs / Dell Lenovo HP / i3 i5 i7", "ab 99 €"):
 # the price is only a starting price, so it's treated like a lot. Checked on the title only.
 MULTI_OFFER = re.compile(

@@ -11,8 +11,8 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score, offsite_matters
-from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant
+from .base import Score
+from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant, payment_reject
 
 _UNIT = r"(?:gb|go|g)\b"
 _STICK_SIZES = (1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128)
@@ -177,9 +177,9 @@ class MemoryScorer:
         def rejected(reason: str, needs_details: bool = False) -> Score:
             return Score(0, cost, summary, reject=reason, needs_details=needs_details)
 
-        for flag in ("offsite", "defect", "machine", "ecc"):
-            if flag == "offsite" and not offsite_matters(listing.url):
-                continue
+        if "offsite" in self.reject and (reason := payment_reject(listing)):
+            return rejected(reason)
+        for flag in ("defect", "machine", "ecc"):
             if flag in self.reject and getattr(mem, flag):
                 return rejected(flag)
         if mem.gb is None:

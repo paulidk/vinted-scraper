@@ -1,7 +1,8 @@
 import pytest
 
+from vinted_scraper.models import Listing
 from vinted_scraper.scoring.cpu_db import lookup
-from vinted_scraper.scoring.specs import parse_specs
+from vinted_scraper.scoring.specs import parse_specs, payment_reject
 
 
 @pytest.mark.parametrize(
@@ -329,3 +330,43 @@ def test_surcharge_options_are_not_the_listed_configuration():
 ])
 def test_upgrade_limits_are_not_installed_ram(text, ram):
     assert parse_specs(text).ram_gb == ram
+
+
+VINTED, KLEINANZEIGEN = "https://www.vinted.de/items/1", "https://www.kleinanzeigen.de/s-anzeige/1"
+
+
+# Wordings from stored Kleinanzeigen listings (2026-10-30).
+@pytest.mark.parametrize("url, text, extra, reason", [
+    (KLEINANZEIGEN, "Versand möglich, Zahlung dann nur via Paypal Freunde.", "", "paypal f&f"),
+    (KLEINANZEIGEN, "Gerne PayPal an Freunde.", "", "paypal f&f"),
+    (KLEINANZEIGEN, "Versand gegen Vorüberweisung oder Paypal(freunde)", "", "paypal f&f"),
+    (KLEINANZEIGEN, "Abholung oder bei Versand nur PayPal F&F", "", "paypal f&f"),
+    (KLEINANZEIGEN, "PayPal möglich? A: Ja, nur über „Freunde und Familie“.", "", "paypal f&f"),
+    (KLEINANZEIGEN, "Überweisung auch über PayPal (Freunde und Familie)", "", "paypal f&f"),
+    (KLEINANZEIGEN, "PayPal F&F, damit keine Gebühren anfallen", "", "paypal f&f"),
+    (KLEINANZEIGEN, "PayPal Freunde, kein Käuferschutz", "", "paypal f&f"),
+    # both offered: stays in
+    (KLEINANZEIGEN, "PayPal (Freunde oder Käuferschutz bei Gebührenübernahme)", "", None),
+    (KLEINANZEIGEN, "Zahlung über Kleinanzeigen (Gebühren trägt der Käufer) - PayPal (Freunde und Familie)", "", None),
+    (KLEINANZEIGEN, "PayPal F&F oder Waren und Dienstleistungen", "", None),
+    (KLEINANZEIGEN, "- Paypal Freunde/Familie (+ Versandk.) - Paypal Ware/Dienstleistung", "", None),
+    (KLEINANZEIGEN, "Sicher Bezahlen wird bevorzugt, PayPal Freunde und Familie möglich", "", None),
+    (KLEINANZEIGEN, "Paypal Freunde & Familie bei Versand. Die Bezahlfunktion nutze ich nicht", "", "paypal f&f"),
+    (KLEINANZEIGEN, "Nur PayPal F&F", "06112 Halle · Versand möglich · Direkt kaufen", None),
+    # no F&F at all
+    (KLEINANZEIGEN, "Kein PayPal F&F, nur Abholung", "", None),
+    (KLEINANZEIGEN, "Zahlung per PayPal", "", None),
+    (KLEINANZEIGEN, "Privatverkauf, Versand möglich", "", None),
+    # Vinted: also any other talk of paying elsewhere, unless buying through Vinted is on offer
+    (VINTED, "Paypal friends and family", "", "paypal f&f"),
+    (VINTED, "Kauf über Vinted oder PayPal Freunde", "", None),
+    (VINTED, "PayPal Waren und Dienstleistungen", "", None),
+    (VINTED, "Zahlung per PayPal", "", "offsite"),
+    (VINTED, "Kontakt über WhatsApp", "", "offsite"),
+    (VINTED, "Nicht über Vinted, PayPal Waren und Dienstleistungen", "", "offsite"),
+    (VINTED, "Sehr guter Zustand", "", None),
+    ("https://www.ebay.de/itm/1", "Nur PayPal F&F", "", None),
+])
+def test_payment_reject(url, text, extra, reason):
+    listing = Listing(id=1, title="Dell OptiPlex", price=50, currency="EUR", url=url, description=text, extra=extra)
+    assert payment_reject(listing) == reason

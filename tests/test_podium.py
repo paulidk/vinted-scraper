@@ -68,18 +68,18 @@ def test_item_missing_from_results_is_checked_and_sold_ones_drop_out(tmp_path, c
 
     runner2, fake2, rec2 = podium_runner(tmp_path, without_best)
     runner2.run_once()
-    assert fake2["c"].page_calls == [101]
+    assert fake2["c"].page_calls[0] == 101
     assert rec2.podiums == []  # still ranked (page didn't say it was sold), nothing changed
 
     runner3, fake3, rec3 = podium_runner(tmp_path, without_best)
     runner3.client("www.vinted.de").availability = {101: True}
     runner3.run_once()
-    assert fake3["c"].page_calls == [101] and rec3.podiums == []
+    assert fake3["c"].page_calls[0] == 101 and rec3.podiums == []
 
     runner4, fake4, rec4 = podium_runner(tmp_path, without_best)
     runner4.client("www.vinted.de").availability = {101: False}
     runner4.run_once()
-    assert fake4["c"].page_calls == [101]
+    assert fake4["c"].page_calls[0] == 101
     assert ids(rec4.podiums[0]) == [102, 105]
     assert rec4.podiums[0].dropped == ["Dell OptiPlex 7060 Micro i5-8500T 16GB RAM 256GB SSD"]
     assert runner4.store.top("pcs") and 101 not in [r["id"] for r in runner4.store.top("pcs")]
@@ -120,7 +120,7 @@ def test_availability_check_picks_up_a_new_price(tmp_path, catalog_items):
     client = runner2.client("www.vinted.de")
     client.availability, client.prices = {101: True}, {101: 150.0}
     runner2.run_once()
-    assert fake2["c"].page_calls == [101]
+    assert fake2["c"].page_calls[0] == 101
     listing = runner2.store.listing("pcs", 101)
     assert listing.price == 150 and listing.total_price == 158.38  # Vinted's buyer fee grows with it
     sent = {d.url.rsplit("/", 1)[1]: d for d in rec2.podiums[0].deals}
@@ -237,3 +237,15 @@ def test_podium_candidate_with_snippet_gets_its_full_description(tmp_path, catal
     assert runner.store.listing("pcs", 101).partial_description is False
     row = runner.store.db.execute("SELECT summary FROM items WHERE id=101").fetchone()
     assert "barebone" in row["summary"] and "no_psu" in row["summary"]
+
+
+def test_friends_and_family_in_the_description_loses_the_podium_place(tmp_path, catalog_items):
+    # Vinted search results have no description: a podium place needs the listing checked first.
+    runner, _, rec = podium_runner(tmp_path, catalog_items)
+    client = runner.client("www.vinted.de")
+    client.availability = {101: True, 102: True, 105: True}
+    client.descriptions = {101: "Bezahlung nur per PayPal Freunde und Familie"}
+    runner.run_once()
+    assert 101 not in ids(rec.podiums[0])
+    assert runner.store.listing("pcs", 101).description.startswith("Bezahlung")
+    assert [r["reject"] for r in runner.store.rows("pcs") if r["id"] == 101] == ["paypal f&f"]

@@ -98,8 +98,7 @@ use `params`). The runner picks the client per query (`make_client` by domain) a
 (`client_for` by the listing URL's host) for descriptions and availability checks. All results of a
 search share one ranking. Kleinanzeigen ids are stored as `ID_OFFSET` (10^15) + ad id so they can't
 collide with Vinted ids; `item_page` strips it. `crawled` keys leave out the domain for the search's
-main site, so queries crawled before multi-site support aren't crawled deep again. The scorer ignores
-`offsite` for Kleinanzeigen URLs. Verified live on 2026-10-24:
+main site, so queries crawled before multi-site support aren't crawled deep again. Verified live on 2026-10-24:
 
 - Search results are an Astro page. The `astro-island` whose `props` contain `resultAds` holds every
   listing (id, title, description snippet ending in "...", seoLink, price text like "120 € VB",
@@ -113,7 +112,7 @@ main site, so queries crawled before multi-site support aren't crawled deep agai
 - `Listing.partial_description` marks the snippet: the runner fetches the full text when specs are
   missing, and a longer stored description wins over the snippet afterwards.
 - `Listing.extra` ("06112 Halle · nur Abholung · VB") is stored and shown in alerts.
-- PayPal is normal there, hence the scorer skips `offsite` for Kleinanzeigen listings.
+- `buyNowEnabled` on a result = the site's own checkout; `_normalize` adds "Direkt kaufen" to `extra`.
 - The user's config: mini-pc (14 terms), desktops (Vinted category 3581 + Kleinanzeigen 228) and
   servers (13 terms incl. workstations), all on both sites, Kleinanzeigen with `shipping: true`.
 
@@ -128,8 +127,7 @@ page, `deliveryCountry:DE` + `itemLocationCountry:DE` by default, fixed price/be
 "for parts" condition. Ids are `ID_OFFSET` (2·10^15) + legacy item id; URLs are rebuilt as
 `www.ebay.de/itm/<id>` without tracking params, so `client_for` finds the client by host.
 `Listing.shipping` (stored column `shipping`) is the quoted cost and replaces `shipping_estimate` in
-every scorer (`Listing.shipping_or`). `scoring.base.offsite_matters` skips `offsite` for Kleinanzeigen
-and eBay. Category ids were checked on ebay.de 2026-10-28: 179 PC Desktops & All-in-Ones, 11211
+every scorer (`Listing.shipping_or`). Category ids were checked on ebay.de 2026-10-28: 179 PC Desktops & All-in-Ones, 11211
 Computerserver, 170083 Arbeitsspeicher, 56083 Interne Festplatten, 106273 Netzgebundener Speicher.
 The API code is tested against fake responses only, built from eBay's documented format; the
 first live check needs the user's keys (`probe` with an ebay.de search URL).
@@ -177,7 +175,11 @@ iGPUs don't count). The title's card wins over ones in the description. A size r
 (≤12 GB, "GTX 1060 6GB") or followed by VRAM/GDDR is dropped before RAM/storage parsing. Points
 come from `weights.gpu` (default 0); the card's idle watts are always added to the energy cost.
 A card alone ("Grafikkarte ...", or a card with no CPU or machine word) is `cpu_only`.
-`offsite` flags requests to pay outside Vinted; it is in the default reject list.
+`specs.payment_reject(listing)` runs for `reject: offsite`, first in every scorer but `rules`. PayPal F&F
+(`FRIENDS_FAMILY`) without anything protected (`SAFE_PAYMENT`, "Direkt kaufen" in `extra`) gives
+`reject="paypal f&f"` on Vinted and Kleinanzeigen; negations don't count ("kein F&F", "kein Käuferschutz").
+On Vinted any `OFFSITE` wording also rejects unless buying through Vinted is on offer; eBay is exempt.
+Cases: `test_payment_reject`.
 
 Vinted's text search is fuzzy and ignores the text almost completely with a category filter, so
 the user's `desktops` search is the whole category 3581 (newest first) and `servers` uses
@@ -231,7 +233,7 @@ is enabled, plus `dimm-ram` (desktop sticks), `hdd` and `nas` (60 min each); the
   table, and a `Podium` is sent via `Notifier.send_podium` only when the ids/order differ, a member
   got dearer (always: sellers on Kleinanzeigen often fix the price minutes after posting), or (with
   `price_drop`) a member got cheaper. Members missing from this run's results (or known only from a
-  snippet) are checked with `client.item_page`. On Vinted a sold/reserved listing has **no JSON-LD
+  snippet or without a description, which may say "nur F&F") are checked with `client.item_page`. On Vinted a sold/reserved listing has **no JSON-LD
   at all**, but the RSC payload carries a `buyer_item_status` block (`"title":"Verkauft"`) and
   `"can_buy":false`; an available one has `"can_buy":true` (checked 2026-10-25). A 404 means
   deleted. `ItemPage.price` (Vinted JSON-LD `offers.price`, Kleinanzeigen `#viewad-price`) updates

@@ -14,8 +14,8 @@ import re
 from dataclasses import dataclass
 
 from ..models import Listing
-from .base import Score, offsite_matters
-from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant
+from .base import Score
+from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant, payment_reject
 
 _NUM = r"(\d{1,2}\.\d{3}|\d{1,4}(?:[.,]\d{1,2})?)"
 # GB below 100 is never a hard drive ("6 GB/s", "8GB RAM")
@@ -190,9 +190,9 @@ class DriveScorer:
         def rejected(reason: str) -> Score:
             return Score(0, cost, summary, reject=reason)
 
-        for flag in ("offsite", "defect", "device", "sas", "external"):
-            if flag == "offsite" and not offsite_matters(listing.url):
-                continue
+        if "offsite" in self.reject and (reason := payment_reject(listing)):
+            return rejected(reason)
+        for flag in ("defect", "device", "sas", "external"):
             if flag in self.reject and getattr(drives, flag):
                 return rejected(flag)
         if drives.empty or drives.tape:

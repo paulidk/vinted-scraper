@@ -111,8 +111,8 @@ there only (its filters may then go in `params`).
 - Alerts show where the item is, whether it ships, and "VB" (price negotiable).
 - There's no Vinted buyer fee. Search results only include the start of a description, so the
   rest is fetched (within `fetch_details`) when specs are missing.
-- The `offsite` check (pay outside Vinted) only applies to Vinted listings: PayPal is the normal
-  way to pay on Kleinanzeigen.
+- Plain PayPal is normal on Kleinanzeigen, so only PayPal Friends & Family counts against a listing
+  there (see "Payment" below).
 - Every term costs one request per site and run, so 14 terms on both sites are 28 requests every
   30 minutes. Kleinanzeigen ids are stored with an offset (10^15) so they never clash with Vinted's.
 - Kleinanzeigen's terms of use don't allow automated access, just like Vinted's. Keep the run
@@ -179,8 +179,27 @@ Add `ebay` to `sites`; its filters go under `ebay`:
 Only listings that ship to Germany are returned, and the quoted shipping cost replaces the
 scorer's `shipping_estimate`. Descriptions are fetched through the API when specs are missing, and
 the podium check reads the current price and whether the listing has ended. Alerts show location,
-shipping, "Preisvorschlag" (best offer) and "gewerblich". The `offsite` check is skipped, because
+shipping, "Preisvorschlag" (best offer) and "gewerblich". The payment check is skipped, because
 payment always runs through eBay. eBay ids are stored with an offset (2·10^15).
+
+## Payment
+
+`reject: offsite` (on by default in the PC, RAM, drive and NAS scorers) sorts out listings that want
+**PayPal Friends & Family**, which has no buyer protection, on Vinted and Kleinanzeigen. A listing
+stays in if it also offers something protected, so "PayPal F&F or Käuferschutz" is fine:
+
+- the site's own checkout: Kleinanzeigen's "Direkt kaufen" (read from the search result) or a mention
+  of "Sicher bezahlen", buying through Vinted;
+- PayPal with buyer protection: "Waren und Dienstleistungen", "Käuferschutz", "gewerblich", or the
+  buyer paying the fees.
+
+"Kein PayPal F&F" doesn't count as offering it. Rejected listings show `paypal f&f` as the reason.
+On Vinted any other talk of paying elsewhere (plain PayPal, WhatsApp, bank transfer) still rejects,
+unless the listing also says it can be bought through Vinted; "not through Vinted" always rejects.
+
+Payment terms are mostly in the description. Search results on Vinted have none and on Kleinanzeigen
+only a snippet, so with `notify.podium` every listing is opened before it gets a place. Without podium
+mode only the `fetch_details` listings are read in full, so an F&F listing can still be alerted.
 
 ## Schedule
 

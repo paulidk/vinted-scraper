@@ -181,8 +181,10 @@ class Runner:
         checks, checked = rules.podium * 2, set()
         while True:
             rows = self.store.top(search.name, rules.podium, rules.podium_hours, rules.min_value)
-            # Missing from this run's results (sold?) or only known from a search snippet: look at the listing.
-            unverified = [r["id"] for r in rows if (r["id"] not in seen or r["partial"]) and r["id"] not in checked]
+            # Missing from this run's results (sold?) or known without its full description (Vinted results
+            # have none, Kleinanzeigen only a snippet), which may say "nur PayPal F&F": look at the listing.
+            unverified = [r["id"] for r in rows if (r["id"] not in seen or r["partial"] or not r["description"])
+                          and r["id"] not in checked]
             if not unverified or checks <= 0:
                 break
             urls = {r["id"]: r["url"] for r in rows}
