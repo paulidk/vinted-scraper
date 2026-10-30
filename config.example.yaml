@@ -23,6 +23,9 @@ notifiers:
   - type: console
   # - type: discord
   #   webhook_url: ${DISCORD_WEBHOOK}
+  # - type: discord          # or through a bot, which adds Ignore buttons (see README)
+  #   bot_token: ${DISCORD_BOT_TOKEN}
+  #   channel_id: "1234567890"
   # - type: telegram
   #   bot_token: ${TELEGRAM_BOT_TOKEN}
   #   chat_id: ${TELEGRAM_CHAT_ID}

@@ -61,6 +61,7 @@ nothing. Start there when scraping breaks.
 | `vinted_scraper/ranking.py` | rescoring stored listings with the current config; podium diff → `Podium` message |
 | `vinted_scraper/storage.py` | SQLite: seen items, cached descriptions, notified price, sold (`gone`), last podium per search |
 | `vinted_scraper/notify.py` | console, Discord, Telegram, ntfy, generic webhook |
+| `vinted_scraper/discord_bot.py` | gateway connection that receives Ignore button presses |
 | `vinted_scraper/config.py` | YAML loading, `${VAR}` / `${VAR:-default}` expansion, search URL → params |
 | `vinted_scraper/webui.py` + `webui.html` | stdlib-only config editor, no CDN, works offline |
 | `deploy/`, `Dockerfile`, `docker-compose.yml` | systemd timer (`once` every 30 min), Docker (`run`; `--profile ui` for the editor) |
@@ -239,6 +240,16 @@ is enabled, plus `dimm-ram` (desktop sticks), `hdd` and `nas` (60 min each); the
   deleted. `ItemPage.price` (Vinted JSON-LD `offers.price`, Kleinanzeigen `#viewad-price`) updates
   the stored price; `Store.set_price` scales `total_price` with it. Sold ones get `gone` set and
   are skipped until they show up in results again; pages that can't be classified are kept and logged as a warning. A blocked run leaves the podium unchanged.
+
+## Discord Ignore buttons (`discord_bot.py`)
+
+`type: discord` with `bot_token` + `channel_id` posts through the bot API with buttons; `webhook_url`
+stays button-free. `run` starts `IgnoreListener`, a gateway connection on curl_cffi's WebSocket
+(no new dependency): `read()` polls frames itself so one thread can also send heartbeats. A press is
+answered first (type 7, button becomes Undo, 3 s limit) and saved to the `ignored` table afterwards by
+a second thread with a long SQLite timeout, because a scrape holds the write lock for minutes.
+`ignored` is per listing id, across searches; `Store.rows` and `Store.top` leave those rows out.
+The WebSocket transport was checked live (hello from the gateway) without a token.
 
 ## Web UI security (`webui.py`)
 

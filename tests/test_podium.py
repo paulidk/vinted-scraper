@@ -2,12 +2,16 @@ import copy
 import re
 import sqlite3
 
+import pytest
+
 from test_runner import make_runner
 
 from vinted_scraper.client import BlockedError
 from vinted_scraper.config import NotifyRules
+from vinted_scraper.models import Listing
 from vinted_scraper.notify import Deal, DiscordNotifier, Notifier, Podium
 from vinted_scraper.ranking import rescore
+from vinted_scraper.scoring import Score
 from vinted_scraper.storage import Store
 
 
@@ -249,3 +253,33 @@ def test_friends_and_family_in_the_description_loses_the_podium_place(tmp_path, 
     assert 101 not in ids(rec.podiums[0])
     assert runner.store.listing("pcs", 101).description.startswith("Bezahlung")
     assert [r["reject"] for r in runner.store.rows("pcs") if r["id"] == 101] == ["paypal f&f"]
+
+
+def test_ignored_listing_leaves_ranking_and_undo_restores_it(tmp_path):
+    store = Store(tmp_path / "db.sqlite")
+    score = Score(10, 100, "ok")
+    for item_id in (1, 2):
+        store.upsert("pcs", Listing(id=item_id, title=f"PC {item_id}", price=100, currency="EUR", url="u"), score)
+    store.commit()
+    store.set_ignored(1, True)
+    assert [r["id"] for r in store.top("pcs")] == [2] and [r["id"] for r in store.rows("pcs")] == [2]
+    assert store.ignored() == {1}
+    store.set_ignored(1, False)
+    assert {r["id"] for r in store.top("pcs")} == {1, 2} and store.ignored() == set()
+
+
+def test_discord_bot_sends_ignore_buttons_webhook_does_not(monkeypatch):
+    sent = []
+    monkeypatch.setattr("vinted_scraper.notify._post", lambda url, payload, headers=None: sent.append((url, payload, headers)))
+    deals = [Deal("pcs", f"PC {i}", 100, "EUR", 9, "s", "u", rank=i, item_id=100 + i) for i in range(1, 7)]
+    DiscordNotifier(bot_token="tok", channel_id=42).send_podium(Podium("pcs", deals))
+    DiscordNotifier("https://discord.invalid/hook").send_podium(Podium("pcs", deals))
+    (url, payload, headers), (_, hook_payload, hook_headers) = sent
+    assert url.endswith("/channels/42/messages") and headers == {"Authorization": "Bot tok"}
+    assert [len(row["components"]) for row in payload["components"]] == [5, 1]
+    first = payload["components"][0]["components"][0]
+    assert (first["label"], first["custom_id"]) == ("Ignore 🥇", "ignore:101")
+    assert payload["components"][1]["components"][0]["label"] == "Ignore #6"
+    assert "components" not in hook_payload and hook_headers is None
+    with pytest.raises(ValueError):
+        DiscordNotifier(bot_token="tok")

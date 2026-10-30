@@ -9,6 +9,8 @@ from curl_cffi import requests
 
 log = logging.getLogger(__name__)
 
+API = "https://discord.com/api/v10"
+
 
 @dataclass
 class Deal:
@@ -24,6 +26,7 @@ class Deal:
     rank: int = 0  # place on the podium, 0 for a plain deal
     change: str = ""  # podium only: "new", "up from #3", ...
     extra: str = ""  # where it is, shipping, "VB" (Kleinanzeigen)
+    item_id: int = 0
 
     @property
     def medal(self) -> str:
@@ -78,18 +81,31 @@ class ConsoleNotifier(Notifier):
 
 
 class DiscordNotifier(Notifier):
-    def __init__(self, webhook_url: str):
-        self.url = webhook_url
+    """Through a webhook, or through a bot, which is the only way to get Ignore buttons."""
+
+    def __init__(self, webhook_url: str = "", bot_token: str = "", channel_id: str | int = ""):
+        if bot_token and not channel_id:
+            raise ValueError("a discord bot_token needs a channel_id")
+        self.bot_token = bot_token
+        self.url = f"{API}/channels/{channel_id}/messages" if bot_token else webhook_url
 
     def send(self, deals):
         for i in range(0, len(deals), 10):  # Discord allows 10 embeds per message
-            _post(self.url, {"embeds": [self._embed(d) for d in deals[i : i + 10]]})
+            self._post(deals[i : i + 10], {})
 
     def send_podium(self, podium):
         content = f"**🏆 {podium.heading}**"
         if podium.dropped:
             content += "\nOut: " + "; ".join(podium.dropped)
-        _post(self.url, {"content": content[:2000], "embeds": [self._embed(d) for d in podium.deals[:10]]})
+        self._post(podium.deals[:10], {"content": content[:2000]})
+
+    def _post(self, deals: list[Deal], payload: dict) -> None:
+        payload["embeds"] = [self._embed(d) for d in deals]
+        if self.bot_token:
+            _post(self.url, {**payload, "components": ignore_buttons(deals)},
+                  headers={"Authorization": f"Bot {self.bot_token}"})
+        else:
+            _post(self.url, payload)
 
     @staticmethod
     def _embed(d: Deal) -> dict:
@@ -103,6 +119,13 @@ class DiscordNotifier(Notifier):
             "thumbnail": {"url": d.photo} if d.photo else None,
             "footer": {"text": d.search},
         }
+
+
+def ignore_buttons(deals: list[Deal]) -> list[dict]:
+    """One button per deal, in rows of five (Discord's limit). discord_bot.py handles the presses."""
+    buttons = [{"type": 2, "style": 2, "label": f"Ignore {d.medal or d.title[:30]}", "custom_id": f"ignore:{d.item_id}"}
+               for d in deals if d.item_id]
+    return [{"type": 1, "components": buttons[i : i + 5]} for i in range(0, len(buttons), 5)]
 
 
 class TelegramNotifier(Notifier):
@@ -158,9 +181,9 @@ class WebhookNotifier(Notifier):
                                     "dropped": podium.dropped}})
 
 
-def _post(url: str, payload: dict) -> None:
+def _post(url: str, payload: dict, headers: dict | None = None) -> None:
     try:
-        resp = requests.post(url, json=payload, timeout=20)
+        resp = requests.post(url, json=payload, headers=headers, timeout=20)
         if resp.status_code >= 400:
             log.warning("notification to %s failed: HTTP %s %s", url.split("/")[2], resp.status_code, resp.text[:200])
     except requests.RequestsError as exc:

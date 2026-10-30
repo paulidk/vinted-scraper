@@ -151,15 +151,17 @@ class Runner:
             return podium
 
         deals: list[Deal] = []
+        ignored = self.store.ignored()
         for listing, score in sorted(scored, key=lambda pair: pair[1].value, reverse=True):
-            if score.reject or score.value < rules.min_value:
+            if score.reject or score.value < rules.min_value or listing.id in ignored:
                 continue
             prev = self.store.previous(search.name, listing.id)
             notified = prev.notified_price if prev else None
             if notified is None or (rules.price_drop and listing.price < notified - 0.01):
                 deals.append(
                     Deal(search.name, listing.title, listing.price, listing.currency, score.value,
-                         score.summary, listing.url, listing.photo, price_drop_from=notified, extra=listing.extra)
+                         score.summary, listing.url, listing.photo, price_drop_from=notified, extra=listing.extra,
+                         item_id=listing.id)
                 )
                 self.store.mark_notified(search.name, listing.id, listing.price)
             if len(deals) >= rules.top:

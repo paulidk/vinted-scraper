@@ -46,11 +46,18 @@ CREATE TABLE IF NOT EXISTS podium (
     ranking TEXT NOT NULL,  -- JSON list of {"id", "price", "title"}, best first
     updated REAL
 );
+CREATE TABLE IF NOT EXISTS ignored (
+    id INTEGER PRIMARY KEY,  -- a listing hidden with the Ignore button, in every search
+    at REAL
+);
 """
 # Added after the first release; existing databases get them on open.
 COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL", "extra": "TEXT",
            "partial": "INTEGER",  # 1: description is only the snippet from search results
            "shipping": "REAL"}  # quoted shipping cost (eBay), NULL: unknown
+
+
+NOT_IGNORED = "id NOT IN (SELECT id FROM ignored)"
 
 
 @dataclass
@@ -84,9 +91,9 @@ def listing_from_row(row: sqlite3.Row) -> Listing:
 
 
 class Store:
-    def __init__(self, path: str | Path):
+    def __init__(self, path: str | Path, timeout: float = 5.0):
         Path(path).parent.mkdir(parents=True, exist_ok=True)
-        self.db = sqlite3.connect(str(path))
+        self.db = sqlite3.connect(str(path), timeout=timeout)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
         have = {row["name"] for row in self.db.execute("PRAGMA table_info(items)")}
@@ -136,7 +143,7 @@ class Store:
 
     def rows(self, search: str, max_age_hours: float | None = None) -> list[sqlite3.Row]:
         """Stored listings that may still be for sale."""
-        sql = "SELECT * FROM items WHERE search=? AND gone IS NULL"
+        sql = f"SELECT * FROM items WHERE search=? AND gone IS NULL AND {NOT_IGNORED}"
         args: list = [search]
         if max_age_hours:
             sql += " AND last_seen>=?"
@@ -199,6 +206,16 @@ class Store:
     def mark_notified(self, search: str, item_id: int, price: float) -> None:
         self.db.execute("UPDATE items SET notified_price=? WHERE search=? AND id=?", (price, search, item_id))
 
+    def set_ignored(self, item_id: int, ignored: bool) -> None:
+        if ignored:
+            self.db.execute("INSERT OR REPLACE INTO ignored (id, at) VALUES (?,?)", (item_id, time.time()))
+        else:
+            self.db.execute("DELETE FROM ignored WHERE id=?", (item_id,))
+        self.db.commit()
+
+    def ignored(self) -> set[int]:
+        return {row["id"] for row in self.db.execute("SELECT id FROM ignored")}
+
     def podium(self, search: str) -> list[Placed]:
         row = self.db.execute("SELECT ranking FROM podium WHERE search=?", (search,)).fetchone()
         return [Placed(**p) for p in json.loads(row["ranking"])] if row else []
@@ -215,7 +232,7 @@ class Store:
 
     def top(self, search: str | None = None, limit: int = 20, max_age_hours: float | None = 72,
             min_value: float | None = None) -> list[sqlite3.Row]:
-        sql = "SELECT * FROM items WHERE reject IS NULL AND gone IS NULL"
+        sql = f"SELECT * FROM items WHERE reject IS NULL AND gone IS NULL AND {NOT_IGNORED}"
         args: list = []
         if search:
             sql += " AND search=?"

@@ -253,6 +253,27 @@ Try the scorer without scraping:
 python -m vinted_scraper -c config.yaml score "OptiPlex 7070 Micro i5-9500T 16GB 256GB SSD" --price 110
 ```
 
+## Ignore buttons on Discord
+
+Alerts sent through a Discord **bot** get one button per listing. An ignored listing leaves the
+ranking in every search for good, and the next run of the search moves the next listing up. The button
+turns into Undo. A webhook can't carry working buttons, and Discord delivers presses to the bot's
+connection, so this needs `run` to be running (the `once` timer has no listener: presses fail).
+
+1. [discord.com/developers/applications](https://discord.com/developers/applications) → New Application.
+2. **Bot** → Reset Token, copy it. No privileged intents are needed.
+3. **OAuth2 → URL Generator** → scope `bot`, permissions View Channels, Send Messages, Embed Links.
+   Open the URL and add the bot to your server.
+4. In Discord: Settings → Advanced → Developer Mode, then right-click the channel → Copy Channel ID.
+5. Replace the webhook notifier, or you get every alert twice:
+
+```yaml
+notifiers:
+  - type: discord
+    bot_token: ${DISCORD_BOT_TOKEN}
+    channel_id: "1234567890"
+```
+
 ## Avoiding Cloudflare blocks
 
 - Uses [curl_cffi](https://github.com/lexiforest/curl_cffi), which reproduces real Chrome, Edge

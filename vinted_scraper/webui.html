@@ -486,7 +486,8 @@ function searchesTab() {
 
 const NOTIFIER_FIELDS = {
   console: [],
-  discord: [["webhook_url", "Webhook URL", "${DISCORD_WEBHOOK} or https://discord.com/api/webhooks/…"]],
+  discord: [["webhook_url", "Webhook URL (no Ignore buttons)", "${DISCORD_WEBHOOK} or https://discord.com/api/webhooks/…"],
+    ["bot_token", "Or bot token (Ignore buttons, needs `run`)", "${DISCORD_BOT_TOKEN}"], ["channel_id", "Bot: channel ID", "1234567890"]],
   telegram: [["bot_token", "Bot token", "${TELEGRAM_BOT_TOKEN}"], ["chat_id", "Chat ID", "${TELEGRAM_CHAT_ID}"]],
   ntfy: [["topic_url", "Topic URL", "https://ntfy.sh/my-secret-topic"]],
   webhook: [["url", "URL", "https://example.com/hook"]],
@@ -498,7 +499,7 @@ function notifiersTab() {
       h("div", { class: "row" }, h("strong", { style: "flex:1" }, n.type),
         h("button", { class: "btn danger", onclick: () => { cfg.notifiers.splice(i, 1); touch(); render(); } }, "Remove")),
       NOTIFIER_FIELDS[n.type]?.length ? h("div", { class: "grid wide", style: "margin-top:8px" },
-        NOTIFIER_FIELDS[n.type].map(([k, label, ph]) => field(n, k, label, { placeholder: ph, secret: !String(n[k] || "").startsWith("${") && k !== "chat_id" }))) :
+        NOTIFIER_FIELDS[n.type].map(([k, label, ph]) => field(n, k, label, { placeholder: ph, secret: !String(n[k] || "").startsWith("${") && k !== "chat_id" && k !== "channel_id" }))) :
         h("p", { class: "muted" }, "Prints deals in the terminal / log."))),
     h("div", { style: "max-width:240px" }, h("select", { onchange: (e) => { if (!e.target.value) return; cfg.notifiers.push({ type: e.target.value }); touch(); render(); } },
       h("option", { value: "" }, "+ Add notifier…"), Object.keys(NOTIFIER_FIELDS).map((k) => h("option", { value: k }, k)))),

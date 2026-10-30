@@ -129,8 +129,18 @@ def main(argv: list[str] | None = None) -> int:
             print(exc, file=sys.stderr)
             return 1
     else:
+        _start_ignore_buttons(config)
         runner.run_forever()
     return 0
+
+
+def _start_ignore_buttons(config) -> None:
+    for notifier in config.notifiers:
+        if notifier.get("type") == "discord" and notifier.get("bot_token"):
+            from .discord_bot import IgnoreListener
+
+            IgnoreListener(notifier["bot_token"], config.database).start()
+            return
 
 
 def _diagnose(client: VintedClient) -> None:
