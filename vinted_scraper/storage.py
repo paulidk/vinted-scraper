@@ -182,6 +182,9 @@ class Store:
             (score.cost, score.points, score.value, score.summary, score.reject, search, item_id),
         )
 
+    def collected(self, search: str) -> int:
+        return self.db.execute("SELECT COUNT(*) FROM items WHERE search=?", (search,)).fetchone()[0]
+
     def known(self, search: str, ids: list[int]) -> int:
         """How many of these listings were stored before."""
         marks = ",".join("?" * len(ids))

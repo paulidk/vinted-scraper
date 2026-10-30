@@ -47,6 +47,7 @@ def test_first_run_sends_the_whole_podium_once(tmp_path, catalog_items):
     assert ids(podium) == [101, 102, 105]  # 103 defect, 104 excluded
     assert [d.rank for d in podium.deals] == [1, 2, 3]
     assert [d.change for d in podium.deals] == ["new"] * 3
+    assert podium.collected == len(catalog_items)  # rejected ones count too
     runner.run_once()
     assert len(rec.podiums) == 1  # unchanged: no second alert
 
@@ -196,6 +197,7 @@ def test_podium_text_and_discord_payload(monkeypatch):
     DiscordNotifier("https://discord.invalid/hook").send_podium(podium)
     [payload] = sent
     assert "Top 3 changed" in payload["content"] and "Old PC" in payload["content"]
+    assert "collected" not in payload["content"]
     assert [e["title"] for e in payload["embeds"]] == ["🥇 PC 1", "🥈 PC 2", "🥉 PC 3"]
     assert "up from #4" in payload["embeds"][2]["description"]
 
@@ -264,7 +266,7 @@ def test_ignored_listing_leaves_ranking_and_undo_restores_it(tmp_path):
     store.commit()
     store.set_ignored(1, True)
     assert [r["id"] for r in store.top("pcs")] == [2] and [r["id"] for r in store.rows("pcs")] == [2]
-    assert store.ignored() == {1}
+    assert store.ignored() == {1} and store.collected("pcs") == 2
     store.set_ignored(1, False)
     assert {r["id"] for r in store.top("pcs")} == {1, 2} and store.ignored() == set()
 
@@ -273,10 +275,11 @@ def test_discord_bot_sends_ignore_buttons_webhook_does_not(monkeypatch):
     sent = []
     monkeypatch.setattr("vinted_scraper.notify._post", lambda url, payload, headers=None: sent.append((url, payload, headers)))
     deals = [Deal("pcs", f"PC {i}", 100, "EUR", 9, "s", "u", rank=i, item_id=100 + i) for i in range(1, 7)]
-    DiscordNotifier(bot_token="tok", channel_id=42).send_podium(Podium("pcs", deals))
+    DiscordNotifier(bot_token="tok", channel_id=42).send_podium(Podium("pcs", deals, collected=12345))
     DiscordNotifier("https://discord.invalid/hook").send_podium(Podium("pcs", deals))
     (url, payload, headers), (_, hook_payload, hook_headers) = sent
     assert url.endswith("/channels/42/messages") and headers == {"Authorization": "Bot tok"}
+    assert "📦 12.345 listings collected" in payload["content"]
     assert [len(row["components"]) for row in payload["components"]] == [5, 1]
     first = payload["components"][0]["components"][0]
     assert (first["label"], first["custom_id"]) == ("Ignore 🥇", "ignore:101")

@@ -51,6 +51,7 @@ class Podium:
     search: str
     deals: list[Deal]  # best first
     dropped: list[str] = field(default_factory=list)  # titles that left the podium
+    collected: int = 0  # listings stored for this search so far
 
     @property
     def heading(self) -> str:
@@ -97,6 +98,8 @@ class DiscordNotifier(Notifier):
         content = f"**🏆 {podium.heading}**"
         if podium.dropped:
             content += "\nOut: " + "; ".join(podium.dropped)
+        if podium.collected:
+            content += f"\n📦 {podium.collected:,} listings collected".replace(",", ".")
         self._post(podium.deals[:10], {"content": content[:2000]})
 
     def _post(self, deals: list[Deal], payload: dict) -> None:

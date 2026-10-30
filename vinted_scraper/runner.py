@@ -212,7 +212,11 @@ class Runner:
         self.store.save_podium(search.name, new)
         for r in rows:
             self.store.mark_notified(search.name, r["id"], r["price"])
-        return build_podium(search.name, rows, old) if rows else None
+        if not rows:
+            return None
+        podium = build_podium(search.name, rows, old)
+        podium.collected = self.store.collected(search.name)
+        return podium
 
     def _complete(self, search: SearchConfig, scorer, item_id: int, description: str,
                   price: float | None = None, ends_at: float | None = None) -> None:
