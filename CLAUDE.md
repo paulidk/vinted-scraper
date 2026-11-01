@@ -16,7 +16,7 @@ scorers. A local web UI edits `config.yaml`.
 - Arch Linux, **fish** shell. Activate the venv with `source .venv/bin/activate.fish`, not
   `activate`. Arch blocks system-wide `pip install` (PEP 668), so always use the venv, or call
   `.venv/bin/python` / `.venv/bin/pip` directly.
-- Checkout: `~/Desktop/vinted-scraper/vinted-scraper`.
+- Checkout: `~/scraper/vinted-scraper`.
 - Branch `claude/vinted-mini-pc-scraper-u4ym6a` is the only branch and is used as main.
   Commit and push there.
 - `config.yaml`, `config.yaml.bak`, `.env` and `data/` are gitignored. They hold the user's
@@ -130,8 +130,15 @@ page, `deliveryCountry:DE` + `itemLocationCountry:DE` by default, fixed price/be
 `Listing.shipping` (stored column `shipping`) is the quoted cost and replaces `shipping_estimate` in
 every scorer (`Listing.shipping_or`). Category ids were checked on ebay.de 2026-10-28: 179 PC Desktops & All-in-Ones, 11211
 Computerserver, 170083 Arbeitsspeicher, 56083 Interne Festplatten, 106273 Netzgebundener Speicher.
-The API code is tested against fake responses only, built from eBay's documented format; the
-first live check needs the user's keys (`probe` with an ebay.de search URL).
+The tests use fake responses built from eBay's documented format. The user's keys are in `config.yaml`,
+so `probe` with an ebay.de search URL checks it live.
+
+The `buyingOptions` filter lets auctions through that also offer `FIXED_PRICE` or `BEST_OFFER` (seen live
+2026-11-01). Without a fixed price, `price` is empty in search results and the current bid in `getItem`.
+`Listing.ends_at` is the end of an auction (`itemEndDate`, column `ends_at`), and `SearchConfig.keeps` rejects
+it as "excluded" unless it ends within `notify.auction_hours` (default 12). Rescoring brings it back; `RECENT`
+in `storage.py` keeps running auctions in the ranking window, since a 7-day auction has long left the newest-first
+results by then. Rows from before the column learn their end from `getItem` once they reach the podium.
 
 ## Spec parsing rules (`specs.py`)
 
@@ -207,10 +214,10 @@ deliberately rough (rankings, not benchmarks). Users correct them with `cpu_over
 Per search `interval_minutes` (else the global one) and global `quiet_hours` ([start, end] local
 time, may wrap midnight). `runs` table keeps each search's last start; `Runner.run_due` runs what's
 due, `run_forever` sleeps until the next search is due or quiet hours end. `once --if-due` (systemd
-timer every 10 min) allows up to 5 min slack so a 20-min search doesn't slip to 30. The user runs
-mini-pc every 20 min, desktops 30, servers 120, quiet 1–7. `enabled: false` pauses a search
-(`Runner.active`); `once <name>` still runs it. Since 2026-10-25 (PC bought) only `sodimm-ram` (60 min)
-is enabled, plus `dimm-ram` (desktop sticks), `hdd` and `nas` (60 min each); the three PC searches are paused.
+timer every 10 min) allows up to 5 min slack so a 20-min search doesn't slip to 30. The user's
+quiet hours are 1–7. `enabled: false` pauses a search
+(`Runner.active`); `once <name>` still runs it. As of 2026-11-01 only `mini-pc` (20 min) is enabled. Paused:
+`desktops`, `servers`, `sodimm-ram`, `dimm-ram`, `hdd`, `nas`. All seven run on Vinted, Kleinanzeigen and eBay.
 
 ## Runner behaviour worth keeping
 

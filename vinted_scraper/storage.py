@@ -54,10 +54,13 @@ CREATE TABLE IF NOT EXISTS ignored (
 # Added after the first release; existing databases get them on open.
 COLUMNS = {"total_price": "REAL", "brand": "TEXT", "condition": "TEXT", "gone": "REAL", "extra": "TEXT",
            "partial": "INTEGER",  # 1: description is only the snippet from search results
-           "shipping": "REAL"}  # quoted shipping cost (eBay), NULL: unknown
+           "shipping": "REAL",  # quoted shipping cost (eBay), NULL: unknown
+           "ends_at": "REAL"}  # when an auction ends, NULL: not an auction or not known yet
 
 
 NOT_IGNORED = "id NOT IN (SELECT id FROM ignored)"
+# A running auction left the newest-first results long before its last hours, when it finally ranks.
+RECENT = "(last_seen>=? OR ends_at>?)"
 
 
 @dataclass
@@ -87,6 +90,7 @@ def listing_from_row(row: sqlite3.Row) -> Listing:
         url=row["url"] or "", total_price=total, brand=row["brand"] or "",
         condition=row["condition"] or "", photo=row["photo"] or "", description=row["description"] or "",
         extra=row["extra"] or "", partial_description=bool(row["partial"]), shipping=row["shipping"],
+        ends_at=row["ends_at"],
     )
 
 
@@ -122,8 +126,8 @@ class Store:
         self.db.execute(
             """INSERT INTO items (search, id, title, price, currency, cost, points, value, summary, url, photo,
                                   description, reject, first_seen, last_seen, total_price, brand, condition, extra,
-                                  partial, shipping)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                  partial, shipping, ends_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                ON CONFLICT (search, id) DO UPDATE SET
                  title=excluded.title, price=excluded.price, cost=excluded.cost, points=excluded.points,
                  value=excluded.value, summary=excluded.summary, photo=excluded.photo,
@@ -133,12 +137,12 @@ class Store:
                               THEN excluded.partial ELSE items.partial END,
                  reject=excluded.reject, last_seen=excluded.last_seen, total_price=excluded.total_price,
                  brand=excluded.brand, condition=excluded.condition, extra=excluded.extra,
-                 shipping=excluded.shipping, gone=NULL""",
+                 shipping=excluded.shipping, ends_at=COALESCE(excluded.ends_at, items.ends_at), gone=NULL""",
             (search, listing.id, listing.title, listing.price, listing.currency, score.cost, score.points,
              score.value, score.summary, listing.url, listing.photo, listing.description, score.reject, now, now,
              # Never NULL for new rows: NULL marks rows stored before the column existed.
              listing.total_price or listing.price, listing.brand, listing.condition, listing.extra,
-             int(listing.partial_description), listing.shipping),
+             int(listing.partial_description), listing.shipping, listing.ends_at),
         )
 
     def rows(self, search: str, max_age_hours: float | None = None) -> list[sqlite3.Row]:
@@ -146,8 +150,9 @@ class Store:
         sql = f"SELECT * FROM items WHERE search=? AND gone IS NULL AND {NOT_IGNORED}"
         args: list = [search]
         if max_age_hours:
-            sql += " AND last_seen>=?"
-            args.append(time.time() - max_age_hours * 3600)
+            now = time.time()
+            sql += f" AND {RECENT}"
+            args += [now - max_age_hours * 3600, now]
         return self.db.execute(sql, args).fetchall()
 
     def listings(self, search: str, max_age_hours: float | None = None) -> list[Listing]:
@@ -167,6 +172,9 @@ class Store:
             "THEN round(total_price * ? / price, 2) END, price=? WHERE search=? AND id=?",
             (price, price, search, item_id),
         )
+
+    def set_ends_at(self, search: str, item_id: int, ends_at: float) -> None:
+        self.db.execute("UPDATE items SET ends_at=? WHERE search=? AND id=?", (ends_at, search, item_id))
 
     def update_score(self, search: str, item_id: int, score) -> None:
         self.db.execute(
@@ -238,8 +246,9 @@ class Store:
             sql += " AND search=?"
             args.append(search)
         if max_age_hours:
-            sql += " AND last_seen>=?"
-            args.append(time.time() - max_age_hours * 3600)
+            now = time.time()
+            sql += f" AND {RECENT}"
+            args += [now - max_age_hours * 3600, now]
         if min_value is not None:
             sql += " AND value>=?"
             args.append(min_value)

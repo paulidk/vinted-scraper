@@ -1,12 +1,13 @@
 import copy
 import re
 import sqlite3
+import time
 
 import pytest
 
 from test_runner import make_runner
 
-from vinted_scraper.client import BlockedError
+from vinted_scraper.client import BlockedError, ItemPage
 from vinted_scraper.config import NotifyRules
 from vinted_scraper.models import Listing
 from vinted_scraper.notify import Deal, DiscordNotifier, Notifier, Podium
@@ -283,3 +284,58 @@ def test_discord_bot_sends_ignore_buttons_webhook_does_not(monkeypatch):
     assert "components" not in hook_payload and hook_headers is None
     with pytest.raises(ValueError):
         DiscordNotifier(bot_token="tok")
+
+
+def auction(item, hours_left):
+    return {**item, "ends_at": time.time() + hours_left * 3600}
+
+
+def test_auction_stays_hidden_until_it_ends_soon(tmp_path, catalog_items):
+    far = [auction(catalog_items[0], 24 * 5), *catalog_items[1:]]
+    runner, _, rec = podium_runner(tmp_path, far)
+    runner.run_once()
+    assert 101 not in ids(rec.podiums[0])
+    # days later: long gone from the newest-first results, and older than podium_hours
+    runner.store.db.execute("UPDATE items SET last_seen=?, ends_at=? WHERE id=101", (time.time() - 96 * 3600, time.time() + 3600))
+    runner.store.commit()
+
+    runner2, fake2, rec2 = podium_runner(tmp_path, catalog_items[1:])
+    runner2.client("www.vinted.de").availability = {101: True}
+    runner2.run_once()
+    assert ids(rec2.podiums[0])[0] == 101 and fake2["c"].page_calls[0] == 101
+
+    runner2.store.db.execute("UPDATE items SET ends_at=? WHERE id=101", (time.time() - 60,))
+    runner2.store.commit()
+    runner2.run_once()  # ended: out without another page load
+    assert 101 not in ids(rec2.podiums[-1]) and fake2["c"].page_calls.count(101) == 1
+
+
+def test_auction_hours_zero_always_shows_auctions(tmp_path, catalog_items):
+    runner, _, rec = podium_runner(tmp_path, [auction(catalog_items[0], 24 * 5), *catalog_items[1:]], auction_hours=0)
+    runner.run_once()
+    assert 101 in ids(rec.podiums[0])
+
+
+def test_podium_member_stored_without_an_end_learns_it_from_its_page(tmp_path, catalog_items):
+    runner, _, rec = podium_runner(tmp_path, catalog_items)
+    runner.run_once()
+    assert ids(rec.podiums[0])[0] == 101
+
+    runner2, fake2, rec2 = podium_runner(tmp_path, catalog_items[1:])
+    client = runner2.client("www.vinted.de")
+    client.availability = {101: True}
+    client.item_page = lambda item_id: ItemPage("", True, ends_at=time.time() + 24 * 3600 * 5 if item_id == 101 else None)
+    runner2.run_once()
+    assert 101 not in ids(rec2.podiums[0])
+
+
+def test_old_stored_rows_gain_the_ends_at_column(tmp_path):
+    path = tmp_path / "old.sqlite"
+    db = sqlite3.connect(path)
+    db.execute("CREATE TABLE items (search TEXT NOT NULL, id INTEGER NOT NULL, title TEXT, price REAL, currency TEXT, cost REAL, "
+               "points REAL, value REAL, summary TEXT, url TEXT, photo TEXT, description TEXT, reject TEXT, first_seen REAL, "
+               "last_seen REAL, notified_price REAL, PRIMARY KEY (search, id))")
+    db.commit()
+    db.close()
+    store = Store(path)
+    assert "ends_at" in {r["name"] for r in store.db.execute("PRAGMA table_info(items)")}

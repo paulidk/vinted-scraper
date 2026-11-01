@@ -466,6 +466,7 @@ function searchCard(s, i, open) {
       field(notify, "top", "Max alerts per run", { type: "number", placeholder: "5", hint: "ignored with top-N alerts" }),
       field(notify, "podium", "Top-N alerts", { type: "number", placeholder: "0", hint: "e.g. 3: alert only when the best 3 change; 0 = alert per deal" }),
       field(notify, "podium_hours", "Keep ranked for (hours)", { type: "number", placeholder: "72", hint: "after an item last showed up in results" }),
+      field(notify, "auction_hours", "Show eBay auctions from (hours before end)", { type: "number", placeholder: "12", hint: "their price is only the current bid; 0 = always show" }),
       h("div", { class: "row" }, check(notify, "price_drop", "Alert again on price drop", true))),
     h("h3", {}, "Scoring"),
     h("div", { class: "grid" }, field(s.scorer, "type", "Scorer", { type: "select", default: "rules",

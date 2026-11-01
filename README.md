@@ -171,7 +171,12 @@ Add `ebay` to `sites`; its filters go under `ebay`:
 - `seller: privat` / `gewerblich` keeps only private or commercial sellers.
 - `country`: where the item is, default `DE`; `any` for anything that ships to Germany.
 - `auctions: true` includes auctions. They're off by default: every bid would change the price and
-  trigger a "price up" alert.
+  trigger a "price up" alert. Auctions that also offer "Sofort-Kaufen" or "Preisvorschlag" come
+  through anyway.
+- `notify.auction_hours` (default 12) hides every auction until it ends within that many hours: until
+  then its price is only the current bid, far below where it will end. It stays stored and rejoins the
+  ranking by itself, whatever `podium_hours` says; ended ones drop out. `0` always shows auctions.
+  Without `podium`, it alerts only if it turns up in search results again during those hours.
 - `conditions`: eBay condition ids separated by `|`; by default everything but "for parts or not
   working" and "new with defects". `all` = no filter.
 - Search URLs from the browser work too (`_nkw`, `_sacat`, `_udlo`/`_udhi` are read).

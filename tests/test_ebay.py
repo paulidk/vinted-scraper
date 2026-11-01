@@ -1,5 +1,6 @@
 import json
 import logging
+from datetime import datetime, timezone
 
 import pytest
 
@@ -161,3 +162,17 @@ def test_config_sites_and_store_round_trip(tmp_path):
     listing = Listing.from_api(item)
     store.upsert("mini", listing, build_scorer({"type": "price"}).score(listing))
     assert store.listing("mini", listing.id).shipping == 5.99
+
+
+def test_auctions_carry_their_end_time():
+    end = "2030-01-02T03:04:05.000Z"
+    bid = summary(2, buyingOptions=["AUCTION", "BEST_OFFER"], itemEndDate=end, price=None, currentBidPrice={"value": "81.32", "currency": "EUR"})
+    fixed = summary(3, itemEndDate=end)  # a fixed-price listing's end date means nothing
+    client = make_client(Resp(200, {"itemSummaries": [bid, fixed]}))
+    items = client.search({"search_text": "mini pc"})
+    auction, plain = [Listing.from_api(i) for i in items]
+    assert auction.price == 81.32 and auction.ends_at == datetime(2030, 1, 2, 3, 4, 5, tzinfo=timezone.utc).timestamp()
+    assert plain.ends_at is None
+    page = parse_item({"buyingOptions": ["AUCTION"], "itemEndDate": end, "currentBidPrice": {"value": "90", "currency": "EUR"}})
+    assert page.ends_at == auction.ends_at and page.price == 90
+    assert parse_item({"buyingOptions": ["FIXED_PRICE"], "itemEndDate": end}).ends_at is None
