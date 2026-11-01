@@ -285,8 +285,12 @@ class Runner:
                 continue
             if isinstance(result, Podium):
                 all_deals += result.deals
-                for notifier in self.notifiers:
-                    notifier.send_podium(result)
+                delivered = [notifier.send_podium(result) for notifier in self.notifiers]
+                if False in delivered:
+                    # The next run compares against what was last delivered, so it sends this again.
+                    log.warning("[%s] podium alert failed, sending it again next run", search.name)
+                    self.store.save_podium(search.name, result.previous)
+                    self.store.commit()
             elif result:
                 all_deals += result
                 for notifier in self.notifiers:

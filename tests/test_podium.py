@@ -286,3 +286,30 @@ def test_discord_bot_sends_ignore_buttons_webhook_does_not(monkeypatch):
     assert "components" not in hook_payload and hook_headers is None
     with pytest.raises(ValueError):
         DiscordNotifier(bot_token="tok")
+
+
+def test_failed_alert_is_sent_again_next_run(tmp_path, catalog_items):
+    runner, _, rec = podium_runner(tmp_path, catalog_items)
+    results = [False, None]
+    send = rec.send_podium
+    rec.send_podium = lambda podium: (send(podium), results.pop(0))[1]
+    runner.run_once()
+    name = rec.podiums[0].search
+    assert runner.store.podium(name) == []  # nothing delivered yet
+    runner.run_once()
+    assert len(rec.podiums) == 2 and [d.change for d in rec.podiums[1].deals] == ["new"] * 3
+    assert ids(rec.podiums[1]) == [p.id for p in runner.store.podium(name)]
+    runner.run_once()
+    assert len(rec.podiums) == 2  # delivered: nothing changed since
+
+
+def test_post_reports_failure(monkeypatch):
+    from vinted_scraper import notify
+
+    class R:
+        status_code, text = 429, "slow down"
+
+    monkeypatch.setattr(notify.requests, "post", lambda *a, **k: R())
+    assert notify.DiscordNotifier("https://discord.invalid/hook").send_podium(Podium("pcs", [deal(1)])) is False
+    R.status_code = 204
+    assert notify.DiscordNotifier("https://discord.invalid/hook").send_podium(Podium("pcs", [deal(1)])) is True

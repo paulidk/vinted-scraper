@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from ..models import Listing
 from .base import Score
 from .drives import parse_size
-from .specs import DEFECT, NO_PSU, OFFSITE, payment_reject
+from .specs import DEFECT, NO_PSU, OFFSITE, payment_reject, pickup_only
 
 # "DS437" alone is a Shuttle PC; Synology says its name or has a suffix (DS218+, DS216j)
 _SYNOLOGY_WORD = re.compile(r"\b(synology|diskstation|rackstation|dsm)\b")
@@ -168,7 +168,7 @@ class NasScorer:
         self.w = {**DEFAULT_WEIGHTS, **(weights or {})}
         self.min_bays, self.min_year, self.require_x86 = min_bays, min_year, require_x86
         self.require_model = require_model
-        self.reject = set(reject if reject is not None else ["defect", "offsite", "accessory"])
+        self.reject = set(reject if reject is not None else ["defect", "offsite", "accessory", "pickup"])
         self.no_psu_penalty = no_psu_penalty
         self.shipping_estimate = shipping_estimate
 
@@ -183,6 +183,8 @@ class NasScorer:
 
         if "offsite" in self.reject and (reason := payment_reject(listing)):
             return rejected(reason)
+        if "pickup" in self.reject and pickup_only(listing):
+            return rejected("pickup only")
         for flag in ("defect", "accessory"):
             if flag == "accessory" and nas.made_for and flag in self.reject:
                 return rejected(flag)

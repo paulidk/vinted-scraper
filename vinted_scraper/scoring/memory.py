@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 from ..models import Listing
 from .base import Score
-from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant, payment_reject
+from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant, payment_reject, pickup_only
 
 _UNIT = r"(?:gb|go|g)\b"
 _STICK_SIZES = (1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128)
@@ -166,7 +166,7 @@ class MemoryScorer:
         self.min_stick_gb = min_stick_gb
         self.max_sticks, self.min_mhz = max_sticks, min_mhz
         self.require_known = require_known
-        self.reject = set(reject if reject is not None else ["defect", "offsite", "ecc", "machine"])
+        self.reject = set(reject if reject is not None else ["defect", "offsite", "ecc", "machine", "pickup"])
         self.shipping_estimate = shipping_estimate
 
     def score(self, listing: Listing) -> Score:
@@ -179,6 +179,8 @@ class MemoryScorer:
 
         if "offsite" in self.reject and (reason := payment_reject(listing)):
             return rejected(reason)
+        if "pickup" in self.reject and pickup_only(listing):
+            return rejected("pickup only")
         for flag in ("defect", "machine", "ecc"):
             if flag in self.reject and getattr(mem, flag):
                 return rejected(flag)

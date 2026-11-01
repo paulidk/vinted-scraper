@@ -83,6 +83,9 @@ nothing. Start there when scraping breaks.
   - waits a random 2–6 s between requests; each search's schedule has ±4 min jitter (≤ 1/4 interval)
   - on 403/429/challenge, backs off exponentially, then rotates fingerprint (and proxy)
   - stops the whole run on `BlockedError` instead of hammering on
+- **Stale sessions:** after about a day a kept session gets status 200 pages without items ("Session
+  refresh"; seen on the user's machine, not captured here). `session_hours` (default 6) renews it, and
+  `search` retries once with a fresh session when a page has no item data, logging the page's start.
 - **Expect Vinted to change its site again.** When it does, the catalog parsing in
   `client.py` is the place to fix. The client tests build small fake catalog pages
   (`catalog_html` in `tests/test_client.py`) in the format seen at the time, so passing tests
@@ -161,7 +164,8 @@ Before any of that, `parse_specs` cleans the text:
 - `_UPGRADE_LIMIT` drops "max. 64GB", "upgradable to 32GB", "bis zu", "erweiterbar auf", ... to the
   end of the clause, so limits never count as installed.
 - `_VARIANTS` collapses dealer configuration lists to the base (smallest) option: "8/16/32GB",
-  "256 / 512 / 1000GB" (3+ values, rising, max ≤ 8× min) and tight ranges "8-32GB", "128GB-1TB".
+  "256 / 512 / 1000GB" (3+ values, rising, max ≤ 8× min), tight ranges "8-32GB", "128GB–1TB" (any dash)
+  and "16 GB oder 32 GB".
   Two values ("8/256", "4/64") stay a RAM/storage pair; " - " with spaces is a separator.
 When several sizes still sit next to RAM keywords, the largest wins.
 
@@ -185,7 +189,8 @@ A card alone ("Grafikkarte ...", or a card with no CPU or machine word) is `cpu_
 (`FRIENDS_FAMILY`) without anything protected (`SAFE_PAYMENT`, "Direkt kaufen" in `extra`) gives
 `reject="paypal f&f"` on Vinted and Kleinanzeigen; negations don't count ("kein F&F", "kein Käuferschutz").
 On Vinted any `OFFSITE` wording also rejects unless buying through Vinted is on offer; eBay is exempt.
-Cases: `test_payment_reject`.
+Cases: `test_payment_reject`. `pickup_only` (reject word `pickup`, not on eBay) reads the text only: Kleinanzeigen's
+"Versand möglich" badge is ticked by sellers who still write "nur Abholung". "Abholung oder Versand" stays.
 
 Vinted's text search is fuzzy and ignores the text almost completely with a category filter, so
 the user's `desktops` search is the whole category 3581 (newest first) and `servers` uses
@@ -245,6 +250,8 @@ quiet hours are 1–7. `enabled: false` pauses a search
   deleted. `ItemPage.price` (Vinted JSON-LD `offers.price`, Kleinanzeigen `#viewad-price`) updates
   the stored price; `Store.set_price` scales `total_price` with it. Sold ones get `gone` set and
   are skipped until they show up in results again; pages that can't be classified are kept and logged as a warning. A blocked run leaves the podium unchanged.
+  A notifier returning False (`send_podium`) restores the last delivered ranking, so the next run sends the alert again;
+  with several notifiers the others get it twice. Per-deal alerts (`send`) aren't resent.
 
 ## Discord Ignore buttons (`discord_bot.py`)
 

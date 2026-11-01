@@ -159,7 +159,7 @@ _E3_FALLBACK = {"1": 5500, "2": 6200, "3": 7000, "4": 7200, "5": 7700, "6": 8100
 
 # The suffix may be written apart: "i7 1165 g7", "i5 8500 t".
 _INTEL_CORE = re.compile(r"\bi([3579])[\s-]?(\d{4,5})\s?([a-z]\d?|[a-z]{1,2})?\b")
-_INTEL_LOW = re.compile(r"\b((?:n|j)\d{3,4}|g\d{4}t?)\b")
+_INTEL_LOW = re.compile(r"\b(n\d{2,4}|j\d{3,4}|g\d{4}t?)\b")
 _RYZEN = re.compile(r"\bryzen\s*(?:ai\s*)?([3579])\s*(pro\s*)?(\d{3,4})\s*([a-z]{1,2})?\b")
 _AMD_A = re.compile(r"\b(a\d{1,2}-\d{4}[a-z]?)\b")
 # Fujitsu/Dell/HP listings often just say "i5 8th gen" / "i5 8. Generation".
@@ -215,7 +215,7 @@ def lookup(text: str, overrides: dict[str, tuple[int, int]] | None = None) -> Cp
         return CpuInfo(f"ryzen {tier} {number}{suffix}", int(base), tdp, gen, estimated=True)
 
     for rx in (_INTEL_LOW, _AMD_A):
-        if m := rx.search(t):
+        for m in rx.finditer(t):  # a model name like "N52" may come before the CPU
             model = m.group(1)
             if model in table:
                 mark, tdp = table[model]

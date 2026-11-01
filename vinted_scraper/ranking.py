@@ -81,4 +81,4 @@ def build_podium(search: str, rows, old: list[Placed]) -> Podium:
                           row["url"], row["photo"] or "", price_drop_from=drop_from, rank=i + 1, change=change,
                           extra=row["extra"] or "", item_id=row["id"]))
     ids = {row["id"] for row in rows}
-    return Podium(search, deals, dropped=[p.title for p in old if p.id not in ids])
+    return Podium(search, deals, dropped=[p.title for p in old if p.id not in ids], previous=old)

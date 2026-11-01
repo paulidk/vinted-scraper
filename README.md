@@ -276,6 +276,9 @@ notifiers:
 
 ## Avoiding Cloudflare blocks
 
+Vinted's sessions go stale after about a day, so the client starts a fresh one every `client.session_hours`
+(default 6), and once more if a page comes back without items.
+
 - Uses [curl_cffi](https://github.com/lexiforest/curl_cffi), which reproduces real Chrome, Edge
   and Safari TLS/HTTP2 fingerprints. That fingerprint is what Cloudflare mostly checks, and
   plain `requests` gets blocked almost straight away.

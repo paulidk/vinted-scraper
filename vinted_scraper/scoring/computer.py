@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from ..models import Listing
 from .base import Score
-from .specs import parse_specs, payment_reject
+from .specs import parse_specs, payment_reject, pickup_only
 
 DEFAULT_WEIGHTS = {
     "cpu": 1.0,  # points per 1000 PassMark
@@ -59,7 +59,7 @@ class ComputerScorer:
         self.assume_ram_gb = assume_ram_gb
         self.unknown_cpu_mark = unknown_cpu_mark
         self.require_cpu = require_cpu
-        self.reject = set(reject if reject is not None else ["defect", "lot", "cpu_only", "offsite"])
+        self.reject = set(reject if reject is not None else ["defect", "lot", "cpu_only", "offsite", "pickup"])
         self.barebone_factor = barebone_factor
         self.no_psu_penalty = no_psu_penalty
         self.shipping_estimate = shipping_estimate
@@ -85,6 +85,8 @@ class ComputerScorer:
 
         if "offsite" in self.reject and (reason := payment_reject(listing)):
             return Score(0, cost, summary, reject=reason)
+        if "pickup" in self.reject and pickup_only(listing):
+            return Score(0, cost, summary, reject="pickup only")
         for flag in ("defect", "lot", "cpu_only", "barebone", "no_psu"):
             if flag in self.reject and getattr(specs, flag):
                 return Score(0, cost, summary, reject=flag)

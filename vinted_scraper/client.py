@@ -226,6 +226,8 @@ class ClientSettings:
     max_delay: float = 6.0
     max_retries: int = 5
     timeout: float = 30.0
+    # A long-lived Vinted session starts getting pages without items after about a day. 0 = never renew.
+    session_hours: float = 6.0
     # eBay's API keys (developer.ebay.com, production "App ID" and "Cert ID"); EBAY_CLIENT_ID /
     # EBAY_CLIENT_SECRET in the environment work too
     ebay_client_id: str = ""
@@ -238,6 +240,7 @@ class VintedClient:
     def __init__(self, settings: ClientSettings | None = None):
         self.settings = settings or ClientSettings()
         self._session: requests.Session | None = None
+        self._session_started = 0.0
         self._fingerprint_idx = random.randrange(len(self.settings.impersonate))
         self._proxy_idx = random.randrange(len(self.settings.proxies)) if self.settings.proxies else 0
         self._last_request = 0.0
@@ -294,8 +297,13 @@ class VintedClient:
         last_error = ""
         for attempt in range(self.settings.max_retries):
             try:
+                hours = self.settings.session_hours
+                if hours and self._session is not None and time.monotonic() - self._session_started > hours * 3600:
+                    log.info("session is %g h old, starting a fresh one", hours)
+                    self.close()
                 if self._session is None:
                     self._session = self._new_session()
+                    self._session_started = time.monotonic()
                 self._pace()
                 headers = {"Accept": accept}
                 if referer:
@@ -357,7 +365,13 @@ class VintedClient:
             html = self.get_html("/catalog", url_params({**query, "page": page}))
             data = parse_catalog_page(html, self.base_url)
             if data is None:
-                log.warning("catalog page has no item data; Vinted may have changed its site")
+                # Status 200 without items, e.g. Vinted's "Session refresh" page: new cookies fix that.
+                log.info("catalog page has no item data, retrying with a fresh session: %r", html[:200])
+                self.close()
+                html = self.get_html("/catalog", url_params({**query, "page": page}))
+                data = parse_catalog_page(html, self.base_url)
+            if data is None:
+                log.warning("catalog page has no item data; Vinted may have changed its site: %r", html[:200])
                 break
             batch = data["items"]
             items.extend(batch)

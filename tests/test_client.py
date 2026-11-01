@@ -80,6 +80,28 @@ def test_refreshes_session_on_401(monkeypatch, no_sleep):
     assert len(sessions) == 2 and sessions[0] == sessions[1]  # same fingerprint, fresh cookies
 
 
+def test_page_without_items_retries_with_a_fresh_session(monkeypatch, no_sleep):
+    refresh = Resp(200, headers={"content-type": "text/html"}, text="<html>Session refresh</html>")
+    c, _, sessions = make_client(monkeypatch, [refresh, page([{"id": 1, "title": "x"}])])
+    assert len(c.search({})) == 1 and len(sessions) == 2
+
+
+def test_page_without_items_twice_gives_nothing(monkeypatch, no_sleep):
+    refresh = Resp(200, headers={"content-type": "text/html"}, text="<html>Session refresh</html>")
+    c, _, sessions = make_client(monkeypatch, [refresh, refresh])
+    assert c.search({}) == [] and len(sessions) == 2
+
+
+def test_old_session_is_renewed(monkeypatch, no_sleep):
+    c, _, sessions = make_client(monkeypatch, [page([]), page([]), page([])])
+    c.search({})
+    c.search({})
+    assert len(sessions) == 1
+    c._session_started -= c.settings.session_hours * 3600 + 1
+    c.search({})
+    assert len(sessions) == 2
+
+
 def test_gives_up_after_max_retries(monkeypatch, no_sleep):
     c, _, _ = make_client(monkeypatch, [Resp(429)] * 3)
     with pytest.raises(BlockedError):

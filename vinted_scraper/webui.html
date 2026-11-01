@@ -187,10 +187,10 @@ async function api(path, body) {
 
 // --------------------------------------------------------------- scorers
 const SCORER_DEFAULTS = {
-  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only", "offsite"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
-  ram: () => ({ type: "ram", ddr: 4, module: "sodimm", min_gb: 16, max_sticks: 2, reject: ["defect", "offsite", "ecc", "machine"], shipping_estimate: 5 }),
-  drive: () => ({ type: "drive", kind: "hdd", form: "3.5", min_tb: 4, reject: ["defect", "offsite", "sas", "device"], kwh_price: 0.32, years: 2, shipping_estimate: 6 }),
-  nas: () => ({ type: "nas", min_bays: 2, min_year: 2015, require_model: true, reject: ["defect", "offsite", "accessory"], shipping_estimate: 10 }),
+  computer: () => ({ type: "computer", min_cpu_mark: 4500, min_ram_gb: 4, reject: ["defect", "lot", "cpu_only", "offsite", "pickup"], shipping_estimate: 6, kwh_price: 0.32, years: 2 }),
+  ram: () => ({ type: "ram", ddr: 4, module: "sodimm", min_gb: 16, max_sticks: 2, reject: ["defect", "offsite", "ecc", "machine", "pickup"], shipping_estimate: 5 }),
+  drive: () => ({ type: "drive", kind: "hdd", form: "3.5", min_tb: 4, reject: ["defect", "offsite", "sas", "device", "pickup"], kwh_price: 0.32, years: 2, shipping_estimate: 6 }),
+  nas: () => ({ type: "nas", min_bays: 2, min_year: 2015, require_model: true, reject: ["defect", "offsite", "accessory", "pickup"], shipping_estimate: 10 }),
   rules: () => ({ type: "rules", base: 10, rules: [] }),
   price: () => ({ type: "price" }),
 };
@@ -203,7 +203,7 @@ const TEMPLATES = {
     kleinanzeigen: { category: 228, shipping: true }, min_price: 30, max_price: 500,
     fetch_details: 10, notify: { min_value: 5, podium: 3, price_drop: true },
     scorer: { ...SCORER_DEFAULTS.computer(), min_cpu_mark: 6000, require_cpu: true, shipping_estimate: 12, weights: { gpu: 0.5 },
-      reject: ["defect", "lot", "cpu_only", "offsite", "barebone", "no_psu"],
+      reject: ["defect", "lot", "cpu_only", "offsite", "barebone", "no_psu", "pickup"],
       form_factor: { tiny: 1, sff: 1, tower: 1, server: 1, unknown: 1, laptop: 0 } } }),
   "Servers & workstations": () => ({ name: "servers", sites: ["vinted", "kleinanzeigen"], kleinanzeigen: { shipping: true },
     queries: ["poweredge", "proliant", "supermicro", "xeon", "epyc", "primergy", "thinksystem", "rack server", "workstation", "dell precision", "hp z440", "thinkstation"],
@@ -225,7 +225,7 @@ const TEMPLATES = {
 
 function computerScorer(sc) {
   const w = obj(sc, "weights"), ff = obj(sc, "form_factor"), xw = obj(sc, "extra_watts");
-  const reject = new Set(sc.reject ?? ["defect", "lot", "cpu_only", "offsite"]);
+  const reject = new Set(sc.reject ?? ["defect", "lot", "cpu_only", "offsite", "pickup"]);
   const rejectBox = (flag, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
     onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label);
   return [
@@ -236,7 +236,7 @@ function computerScorer(sc) {
       field(sc, "assume_ram_gb", "Assume RAM if not stated", { type: "number", placeholder: "8" }),
       field(sc, "unknown_cpu_mark", "Assumed CPU score if unknown", { type: "number", placeholder: "3000" })),
     h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
-      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("cpu_only", "just a CPU, board or graphics card"), rejectBox("offsite", "PayPal F&F only, or paying outside Vinted"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
+      rejectBox("defect", "broken / for parts"), rejectBox("lot", "bundles of several PCs"), rejectBox("cpu_only", "just a CPU, board or graphics card"), rejectBox("offsite", "PayPal F&F only, or paying outside Vinted"), rejectBox("pickup", "pickup only, even if shipping is ticked"), rejectBox("barebone", "without RAM/SSD"), rejectBox("no_psu", "without power supply"),
       check(sc, "require_cpu", "missing a CPU model", false)),
     h("h3", {}, "Running costs"),
     h("div", { class: "grid" },
@@ -270,7 +270,7 @@ function computerScorer(sc) {
 }
 
 function ramScorer(sc) {
-  const reject = new Set(sc.reject ?? ["defect", "offsite", "ecc", "machine"]);
+  const reject = new Set(sc.reject ?? ["defect", "offsite", "ecc", "machine", "pickup"]);
   const rejectBox = (flag, label) => h("label", { class: "check" }, h("input", { type: "checkbox", checked: reject.has(flag),
     onchange: (e) => { e.target.checked ? reject.add(flag) : reject.delete(flag); sc.reject = [...reject]; touch(); } }), label);
   return [
@@ -286,7 +286,7 @@ function ramScorer(sc) {
       field(sc, "gb_cap", "GB counted up to", { type: "number", placeholder: "64" }),
       field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
     h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
-      rejectBox("defect", "broken"), rejectBox("offsite", "PayPal F&F only, or paying outside Vinted"), rejectBox("ecc", "server ECC / registered"),
+      rejectBox("defect", "broken"), rejectBox("offsite", "PayPal F&F only, or paying outside Vinted"), rejectBox("pickup", "pickup only, even if shipping is ticked"), rejectBox("ecc", "server ECC / registered"),
       rejectBox("machine", "a whole laptop or PC"), check(sc, "require_known", "missing the generation or module type", true)),
     h("p", { class: "muted" }, "Points are the GB of the stick or kit, so the value is GB per 100 €."),
   ];
@@ -309,7 +309,7 @@ function driveScorer(sc) {
       field(sc, "tb_cap", "TB counted up to", { type: "number", placeholder: "" }),
       field(sc, "shipping_estimate", "Shipping estimate", { type: "number", placeholder: "0" })),
     h("div", { class: "row", style: "margin-top:10px" }, h("span", { class: "muted" }, "Skip listings that are:"),
-      ...rejectBoxes(sc, ["defect", "offsite", "sas", "device"], [["defect", "broken / bad SMART"], ["offsite", "PayPal F&F only, or paying outside Vinted"],
+      ...rejectBoxes(sc, ["defect", "offsite", "sas", "device", "pickup"], [["pickup", "pickup only, even if shipping is ticked"], ["defect", "broken / bad SMART"], ["offsite", "PayPal F&F only, or paying outside Vinted"],
         ["sas", "SAS (needs a controller)"], ["device", "a whole NAS or PC"], ["external", "external USB drives"]])),
     h("h3", {}, "Running costs"),
     h("div", { class: "grid" },
@@ -334,7 +334,7 @@ function nasScorer(sc) {
     h("div", { class: "row", style: "margin-top:10px" }, check(sc, "require_x86", "Only x86 models (Docker, Plex, VMs)", false),
       check(sc, "require_model", "Only models it knows (Synology, QNAP, Asustor, TerraMaster, Ugreen, WD)", false),
       h("span", { class: "muted" }, "Skip listings that are:"),
-      ...rejectBoxes(sc, ["defect", "offsite", "accessory"], [["defect", "broken"], ["offsite", "PayPal F&F only, or paying outside Vinted"], ["accessory", "routers, RAM, fans, expansion units"]])),
+      ...rejectBoxes(sc, ["defect", "offsite", "accessory", "pickup"], [["pickup", "pickup only, even if shipping is ticked"], ["defect", "broken"], ["offsite", "PayPal F&F only, or paying outside Vinted"], ["accessory", "routers, RAM, fans, expansion units"]])),
     h("h3", {}, "Weights"),
     h("div", { class: "grid" },
       field(w, "bay", "Points per bay", { type: "number", placeholder: "3" }),
@@ -522,6 +522,7 @@ function generalTab() {
       field(client, "max_delay", "Max seconds between requests", { type: "number", placeholder: "6" }),
       field(client, "max_retries", "Retries before giving up", { type: "number", placeholder: "5" }),
       field(client, "timeout", "Request timeout (s)", { type: "number", placeholder: "30" }),
+      field(client, "session_hours", "Start a fresh session every (hours)", { type: "number", placeholder: "6", hint: "Vinted's sessions go stale; 0 = never" }),
       field(client, "impersonate", "Browser fingerprints to rotate (one per line)", { type: "lines", rows: 5, placeholder: "chrome\nchrome131\nchrome124\nedge101\nsafari17_0" }),
       field(client, "proxies", "Proxies (one per line, optional)", { type: "lines", rows: 5, placeholder: "http://user:pass@host:port", hint: "Only needed if your IP gets blocked. Residential proxies work best." }),
       field(client, "ebay_client_id", "eBay App ID (Client ID)", { placeholder: "${EBAY_CLIENT_ID}", hint: "From developer.ebay.com → Application Keys → Production. Needed only for searches on eBay." }),

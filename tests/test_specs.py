@@ -1,8 +1,9 @@
 import pytest
 
 from vinted_scraper.models import Listing
+from vinted_scraper.scoring import build_scorer
 from vinted_scraper.scoring.cpu_db import lookup
-from vinted_scraper.scoring.specs import parse_specs, payment_reject
+from vinted_scraper.scoring.specs import parse_specs, payment_reject, pickup_only
 
 
 @pytest.mark.parametrize(
@@ -70,6 +71,11 @@ def test_cpu_overrides():
         ("Optiplex 2x8GB DDR4 256GB SSD", 16, 256),
         ("i3 / 4 Go RAM", 4, None),
         ("EliteDesk 8/1", 8, 1000),
+    ("16–32GB RAM 256GB–1TB SSD", 16, 256),
+    ("16—32GB RAM 256GB—1TB SSD", 16, 256),
+    ("Verfügbar mit 16 GB oder 32 GB RAM, 512GB SSD", 16, 512),
+    ("16 oder 32 GB RAM 256 GB oder 512 GB SSD", 16, 256),
+    ("8GB RAM oder 256GB SSD Modell", 8, 256),
     ],
 )
 def test_ram_and_storage(text, ram, storage):
@@ -370,3 +376,40 @@ VINTED, KLEINANZEIGEN = "https://www.vinted.de/items/1", "https://www.kleinanzei
 def test_payment_reject(url, text, extra, reason):
     listing = Listing(id=1, title="Dell OptiPlex", price=50, currency="EUR", url=url, description=text, extra=extra)
     assert payment_reject(listing) == reason
+
+
+@pytest.mark.parametrize("text, expected", [
+    ("Nur Selbstabholung in Halle", True),
+    ("nur Abholung", True),
+    ("Kein Versand!", True),
+    ("Versand nicht möglich", True),
+    ("Pickup only", True),
+    ("nur an Selbstabholer", True),
+    ("Kein Versand möglich", True),
+    ("Abholung oder Versand", False),
+    ("Nur Abholung oder Versand", False),
+    ("Nur Abholung, Versand gegen Aufpreis möglich", False),
+    ("Abholung bevorzugt", False),
+    ("Selbstabholung möglich", False),
+    ("Keine Versandkosten", False),
+    ("Preis ohne Versand", False),
+    ("Kein Versand nach Österreich", False),
+])
+def test_pickup_only(text, expected):
+    listing = Listing(id=1, title="Mini PC", price=100, currency="EUR", url="https://www.kleinanzeigen.de/s-anzeige/1", description=text)
+    assert pickup_only(listing) is expected
+
+
+def test_pickup_only_rejects_unless_turned_off_and_not_on_ebay():
+    listing = Listing(id=1, title="Dell OptiPlex 3060 Micro i5-8500T 16GB 256GB", price=100, currency="EUR",
+                      url="https://www.kleinanzeigen.de/s-anzeige/1", description="Nur Selbstabholung")
+    assert build_scorer({"type": "computer"}).score(listing).reject == "pickup only"
+    assert build_scorer({"type": "computer", "reject": ["defect"]}).score(listing).reject is None
+    listing.url = "https://www.ebay.de/itm/1"
+    assert build_scorer({"type": "computer"}).score(listing).reject is None
+
+
+@pytest.mark.parametrize("text, model", [("Intel N97 Mini PC", "n97"), ("Mini PC N95 16GB", "n95"), ("Intel N100", "n100"),
+                                         ("Geekom N52 mit Intel N100", "n100")])
+def test_two_digit_low_power_cpus(text, model):
+    assert parse_specs(text).cpu.model == model

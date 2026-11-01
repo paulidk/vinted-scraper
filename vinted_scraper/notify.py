@@ -52,6 +52,7 @@ class Podium:
     deals: list[Deal]  # best first
     dropped: list[str] = field(default_factory=list)  # titles that left the podium
     collected: int = 0  # listings stored for this search so far
+    previous: list = field(default_factory=list)  # the last ranking delivered, restored if sending fails
 
     @property
     def heading(self) -> str:
@@ -68,8 +69,9 @@ class Notifier:
     def send(self, deals: list[Deal]) -> None:
         raise NotImplementedError
 
-    def send_podium(self, podium: Podium) -> None:
-        self.send(podium.deals)
+    def send_podium(self, podium: Podium) -> bool | None:
+        """False: not delivered. Podium is then sent again next run."""
+        return self.send(podium.deals)
 
 
 class ConsoleNotifier(Notifier):
@@ -100,15 +102,14 @@ class DiscordNotifier(Notifier):
             content += "\nOut: " + "; ".join(podium.dropped)
         if podium.collected:
             content += f"\n📦 {podium.collected:,} listings collected".replace(",", ".")
-        self._post(podium.deals[:10], {"content": content[:2000]})
+        return self._post(podium.deals[:10], {"content": content[:2000]})
 
-    def _post(self, deals: list[Deal], payload: dict) -> None:
+    def _post(self, deals: list[Deal], payload: dict) -> bool | None:
         payload["embeds"] = [self._embed(d) for d in deals]
         if self.bot_token:
-            _post(self.url, {**payload, "components": ignore_buttons(deals)},
-                  headers={"Authorization": f"Bot {self.bot_token}"})
-        else:
-            _post(self.url, payload)
+            return _post(self.url, {**payload, "components": ignore_buttons(deals)},
+                         headers={"Authorization": f"Bot {self.bot_token}"})
+        return _post(self.url, payload)
 
     @staticmethod
     def _embed(d: Deal) -> dict:
@@ -141,7 +142,7 @@ class TelegramNotifier(Notifier):
             _post(self.url, {"chat_id": self.chat_id, "text": d.line(), "disable_web_page_preview": False})
 
     def send_podium(self, podium):
-        _post(self.url, {"chat_id": self.chat_id, "text": podium.text()[:4096], "disable_web_page_preview": True})
+        return _post(self.url, {"chat_id": self.chat_id, "text": podium.text()[:4096], "disable_web_page_preview": True})
 
 
 class NtfyNotifier(Notifier):
@@ -157,11 +158,11 @@ class NtfyNotifier(Notifier):
                          + (f" ({d.change})" if d.change else "") for d in podium.deals)
         if podium.dropped:
             body += "\nOut: " + "; ".join(podium.dropped)
-        self._push(podium.heading, body, podium.deals[0].url if podium.deals else "")
+        return self._push(podium.heading, body, podium.deals[0].url if podium.deals else "")
 
-    def _push(self, title: str, body: str, click: str) -> None:
+    def _push(self, title: str, body: str, click: str) -> bool:
         try:
-            requests.post(
+            resp = requests.post(
                 self.url,
                 data=body.encode(),
                 # HTTP headers must be ASCII, so emoji and accents are dropped from the title.
@@ -170,6 +171,8 @@ class NtfyNotifier(Notifier):
             )
         except requests.RequestsError as exc:
             log.warning("ntfy failed: %s", exc)
+            return False
+        return resp.status_code < 400
 
 
 class WebhookNotifier(Notifier):
@@ -180,17 +183,20 @@ class WebhookNotifier(Notifier):
         _post(self.url, {"deals": [d.__dict__ for d in deals]})
 
     def send_podium(self, podium):
-        _post(self.url, {"podium": {"search": podium.search, "deals": [d.__dict__ for d in podium.deals],
+        return _post(self.url, {"podium": {"search": podium.search, "deals": [d.__dict__ for d in podium.deals],
                                     "dropped": podium.dropped}})
 
 
-def _post(url: str, payload: dict, headers: dict | None = None) -> None:
+def _post(url: str, payload: dict, headers: dict | None = None) -> bool:
     try:
         resp = requests.post(url, json=payload, headers=headers, timeout=20)
-        if resp.status_code >= 400:
-            log.warning("notification to %s failed: HTTP %s %s", url.split("/")[2], resp.status_code, resp.text[:200])
     except requests.RequestsError as exc:
         log.warning("notification failed: %s", exc)
+        return False
+    if resp.status_code >= 400:
+        log.warning("notification to %s failed: HTTP %s %s", url.split("/")[2], resp.status_code, resp.text[:200])
+        return False
+    return True
 
 
 def build_notifiers(configs: list[dict] | None) -> list[Notifier]:

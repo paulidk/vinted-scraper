@@ -9,6 +9,7 @@ client:
   domain: www.vinted.de   # default Vinted country site (www.vinted.fr, www.vinted.nl, www.vinted.pl, ...)
   min_delay: 2            # seconds between requests (randomised between min and max)
   max_delay: 6
+  session_hours: 6        # start a fresh session this often: Vinted's go stale after about a day; 0 = never
   # Browser fingerprints to rotate through when Cloudflare pushes back.
   impersonate: [chrome, chrome131, chrome124, edge101, safari17_0]
   # Optional, only needed if your IP gets blocked. Residential proxies work best.
@@ -80,8 +81,8 @@ searches:
       min_cpu_mark: 4500    # ~ i5-6500T; raise to e.g. 8000 for 8th gen+ only
       min_ram_gb: 4
       assume_ram_gb: 8      # when the listing doesn't say
-      reject: [defect, lot, cpu_only, offsite]  # cpu_only = a loose CPU/board/graphics card,
-                                                # offsite = PayPal F&F only, or pay outside Vinted; also: barebone, no_psu
+      reject: [defect, lot, cpu_only, offsite, pickup]  # pickup = "nur Abholung" in the text; cpu_only = a loose CPU/board/graphics card,
+                                                # offsite = PayPal F&F only, or pay outside Vinted; also: pickup, barebone, no_psu
       shipping_estimate: 6
       kwh_price: 0.32       # electricity cost per kWh ...
       years: 2              # ... over this many years of 24/7 use is added to the price

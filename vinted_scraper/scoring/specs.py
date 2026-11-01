@@ -154,6 +154,28 @@ def _offered(rx: re.Pattern, text: str) -> bool:
                for m in rx.finditer(text))
 
 
+# "nur Abholung", "kein Versand": a seller can tick "Versand möglich" and still write this.
+PICKUP_ONLY = re.compile(
+    r"\b(?:nur|ausschlie(?:ß|ss)lich|lediglich)\s+(?:an\s+|für\s+|per\s+|bei\s+)?(?:selbst)?abhol\w*"
+    r"|\b(?:selbst)?abholung\s+only\b|\bkeine?n?\s+versand\b(?!\s+(?:nach|ins|in|außerhalb))"
+    r"|\bversand\s+(?:ist\s+)?(?:leider\s+)?(?:nicht\s+m[öo]|ausgeschlossen)"
+    r"|\b(?:pick\s?-?up|collection)\s+only\b|\bremise\s+en\s+main\s+propre\s+uniquement\b"
+)
+SHIPS_TOO = re.compile(
+    r"\b(?:oder|auch|und|bzw\.?|or)\s+(?:per\s+|gegen\s+|mit\s+)?(?:versand|versenden|verschicken)\b"
+    r"|\bversand\s+(?:ist\s+)?(?:auch\s+|aber\s+)?(?:gegen|m[öo]glich|per|mit|für|f[üu]r|kostet|\d)"
+    r"|\bversende\b|\bzzgl\.?\s+versand"
+)
+
+
+def pickup_only(listing) -> bool:
+    """eBay searches only return what ships to Germany, and its listings restate that in templates."""
+    if "ebay." in listing.url:
+        return False
+    text = listing.text.lower()
+    return bool(PICKUP_ONLY.search(text)) and not _offered(SHIPS_TOO, text)
+
+
 def payment_reject(listing) -> str | None:
     """Why the way this listing wants to be paid is unsafe, or None.
 
@@ -223,7 +245,8 @@ class Specs:
 # hyphen with spaces is a separator ("i5 - 16GB - 512GB"), not a range.
 _VARIANTS = re.compile(
     r"(?<![\w.,-])\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)?(?:\s*/\s*\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)?){2,}\b"
-    r"|(?<![\w.,-])\d{1,4}(?:[.,]\d)?(?:gb|go|tb|to)?-\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)\b"
+    r"|(?<![\w.,-])\d{1,4}(?:[.,]\d)?(?:gb|go|tb|to)?[-–—]\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)\b"
+    r"|(?<![\w.,-])\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)?\s+(?:oder|or|ou|bzw\.?)\s+\d{1,4}(?:[.,]\d)?\s*(?:gb|go|tb|to)\b"
 )
 _VARIANT_PART = re.compile(r"(\d{1,4}(?:[.,]\d)?)\s*(gb|go|tb|to)?")
 

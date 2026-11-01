@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..models import Listing
 from .base import Score
-from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant, payment_reject
+from .specs import _VARIANTS, DEFECT, OFFSITE, _base_variant, payment_reject, pickup_only
 
 _NUM = r"(\d{1,2}\.\d{3}|\d{1,4}(?:[.,]\d{1,2})?)"
 # GB below 100 is never a hard drive ("6 GB/s", "8GB RAM")
@@ -172,7 +172,7 @@ class DriveScorer:
     ):
         self.kind, self.form = kind, form
         self.min_tb, self.max_hours, self.tb_cap = min_tb, max_hours, tb_cap
-        self.reject = set(reject if reject is not None else ["defect", "offsite", "sas", "device"])
+        self.reject = set(reject if reject is not None else ["defect", "offsite", "sas", "device", "pickup"])
         self.watts = {"3.5": 5.0, "2.5": 1.5, **(watts or {})}
         self.kwh_price, self.years, self.hours_per_day = kwh_price, years, hours_per_day
         self.shipping_estimate = shipping_estimate
@@ -192,6 +192,8 @@ class DriveScorer:
 
         if "offsite" in self.reject and (reason := payment_reject(listing)):
             return rejected(reason)
+        if "pickup" in self.reject and pickup_only(listing):
+            return rejected("pickup only")
         for flag in ("defect", "device", "sas", "external"):
             if flag in self.reject and getattr(drives, flag):
                 return rejected(flag)
