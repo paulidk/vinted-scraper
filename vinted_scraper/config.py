@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import os
 import re
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
@@ -37,9 +36,6 @@ class NotifyRules:
     # >0: keep a ranking of the best N listings and alert only when it changes (replaces per-deal alerts)
     podium: int = 0
     podium_hours: float = 72  # an item missing from search results stays ranked this long (if still for sale)
-    # eBay auctions rank by their current bid, far below the final price: hide them until they end
-    # within this many hours. 0 = always show them.
-    auction_hours: float = 12
 
 
 @dataclass
@@ -66,9 +62,6 @@ class SearchConfig:
         if self.include and not self.include.search(listing.title):
             return False
         if self.exclude and self.exclude.search(f"{listing.title}\n{listing.description}"):
-            return False
-        hours = self.notify.auction_hours
-        if hours and listing.ends_at is not None and not 0 < listing.ends_at - time.time() <= hours * 3600:
             return False
         return True
 
@@ -123,7 +116,7 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
     """Search terms run on every site in `sites`, so one search ranks all of them together.
 
     `params` are Vinted's (`catalog_ids`, `order`, ...), `kleinanzeigen` holds Kleinanzeigen's
-    (`category`, `shipping`, `seller`, ...) and `ebay` eBay's (`category`, `seller`, `auctions`,
+    (`category`, `shipping`, `seller`, ...) and `ebay` eBay's (`category`, `seller`,
     `country`, `conditions`). A search on a single site may put its filters in `params`.
     """
     urls = [raw["url"]] if "url" in raw else raw.get("urls", [])

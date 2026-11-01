@@ -75,7 +75,6 @@ searches:
       # changes, a listing on it gets cheaper, or one is sold. 0 = one alert per deal.
       podium: 3
       podium_hours: 72      # items missing from search results stay ranked this long, if still for sale
-      auction_hours: 12     # eBay auctions stay hidden until they end within this many hours; 0 = always show
     scorer:
       type: computer
       min_cpu_mark: 4500    # ~ i5-6500T; raise to e.g. 8000 for 8th gen+ only
@@ -166,7 +165,6 @@ searches:
   #   category: 179           # 179 desktop & mini PCs, 11211 servers, 170083 RAM, 56083 internal drives, 106273 NAS
   #   seller: privat          # or gewerblich
   #   country: DE             # where the item is (default); `any` = anything that ships to Germany
-  #   auctions: false         # true includes auctions (each bid changes the price)
   #   conditions: "3000"      # eBay condition ids (3000 = used); default: all but "for parts"
   # Without search terms it takes the whole category. The quoted shipping cost replaces
   # `shipping_estimate`, and `offsite` is ignored (payment always runs through eBay).

@@ -33,7 +33,6 @@ class Listing:
     partial_description: bool = False  # only the start, as in Kleinanzeigen search results
     extra: str = ""  # site-specific notes for alerts: "06112 Halle · nur Abholung · VB"
     shipping: float | None = None  # shipping cost the site quotes (eBay); None: scorers use their estimate
-    ends_at: float | None = None  # when an auction ends (epoch seconds); None: not an auction
     raw: dict = field(default_factory=dict, repr=False)
 
     @property
@@ -69,6 +68,5 @@ class Listing:
             partial_description=bool(item.get("description_partial")),
             extra=item.get("extra") or "",
             shipping=_money(item.get("shipping")),
-            ends_at=item.get("ends_at"),
             raw=item,
         )

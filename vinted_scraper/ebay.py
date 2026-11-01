@@ -6,12 +6,10 @@ results carry title, price, shipping cost to Germany, seller type and location, 
 description; `getItem` has the full one. Items are mapped onto the Vinted field names like the
 Kleinanzeigen client does, so `Listing.from_api` and everything after it stay the same.
 
-Search filters (`ebay:` in a search): `category`, `seller` (privat/gewerblich), `auctions`
-(off by default: bids would move the price every few minutes, though auctions that also offer
-"Sofort-Kaufen" or "Preisvorschlag" come through anyway; `notify.auction_hours` hides those until
-shortly before they end), `country` (where the item is,
-default DE; `any` for anywhere that ships to Germany) and `conditions` (eBay condition ids;
-"for parts" is left out by default because those titles rarely say "defekt").
+Search filters (`ebay:` in a search): `category`, `seller` (privat/gewerblich), `country`
+(where the item is, default DE; `any` for anywhere that ships to Germany) and `conditions` (eBay
+condition ids; "for parts" is left out by default because those titles rarely say "defekt").
+Auctions are never included: bids would move the price every few minutes.
 """
 
 from __future__ import annotations
@@ -23,7 +21,7 @@ import os
 import random
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Callable
 from urllib.parse import parse_qsl, quote, urlparse
 
@@ -83,13 +81,7 @@ def params_from_url(url: str) -> dict[str, Any]:
         params["price_to"] = query["_udhi"]
     if query.get("LH_PrefLoc") in ("2", "3", "5", "6"):  # EU / worldwide instead of "Germany only"
         params["country"] = "any"
-    if query.get("LH_Auction") == "1" or query.get("LH_All") == "1":
-        params["auctions"] = True
     return params
-
-
-def _yes(value) -> bool:
-    return value in (True, "true", "ja", "yes", 1, "1")
 
 
 def search_query(params: dict[str, Any], country: str = "de") -> dict[str, str]:
@@ -109,7 +101,7 @@ def search_query(params: dict[str, Any], country: str = "de") -> dict[str, str]:
     if low or high:
         filters.append(f"price:[{low}..{high}]")
         filters.append("priceCurrency:" + {"co.uk": "GBP", "com": "USD", "ch": "CHF", "pl": "PLN"}.get(country, "EUR"))
-    filters.append("buyingOptions:{FIXED_PRICE|BEST_OFFER" + ("|AUCTION}" if _yes(params.get("auctions")) else "}"))
+    filters.append("buyingOptions:{FIXED_PRICE|BEST_OFFER}")
     conditions = str(params.get("conditions", DEFAULT_CONDITIONS) or "")
     if conditions and conditions != "all":
         filters.append("conditionIds:{" + conditions.replace(",", "|") + "}")
@@ -132,18 +124,6 @@ def _shipping(options: list[dict] | None) -> float | None:
     return min(costs) if costs else None
 
 
-def _timestamp(value) -> float | None:
-    try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-    except (AttributeError, ValueError):
-        return None
-
-
-def _auction_end(data: dict) -> float | None:
-    """Only for auctions: fixed-price listings can carry an end date too, and it means nothing."""
-    return _timestamp(data.get("itemEndDate")) if "AUCTION" in (data.get("buyingOptions") or []) else None
-
-
 def _euro(amount: float) -> str:
     return f"{amount:.2f} €".replace(".", ",")
 
@@ -156,9 +136,9 @@ def _normalize(summary: dict, base_url: str) -> dict | None:
     if not item_id.isdigit():
         return None
     buying = summary.get("buyingOptions") or []
+    if "AUCTION" in buying:  # an auction with "Sofort-Kaufen" passes the FIXED_PRICE filter
+        return None
     price = _money(summary.get("price"))
-    if price is None:
-        price = _money(summary.get("currentBidPrice"))
     if price is None:
         return None
     shipping = _shipping(summary.get("shippingOptions"))
@@ -167,7 +147,6 @@ def _normalize(summary: dict, base_url: str) -> dict | None:
     extra = [" ".join(filter(None, [location.get("postalCode"), location.get("city")])) or location.get("country", ""),
              "versandkostenfrei" if shipping == 0 else f"Versand {_euro(shipping)}" if shipping else "",
              "Preisvorschlag" if "BEST_OFFER" in buying else "",
-             "Auktion" if "AUCTION" in buying else "",
              "gewerblich" if seller.get("sellerAccountType") == "BUSINESS" else ""]
     image = summary.get("image") or (summary.get("thumbnailImages") or [{}])[0]
     return {
@@ -182,7 +161,6 @@ def _normalize(summary: dict, base_url: str) -> dict | None:
         "description": summary.get("shortDescription") or "",
         "description_partial": True,
         "extra": " · ".join(filter(None, extra)),
-        "ends_at": _auction_end(summary),
     }
 
 
@@ -201,12 +179,16 @@ def parse_item(data: dict) -> ItemPage:
     statuses = [a.get("estimatedAvailabilityStatus") for a in data.get("estimatedAvailabilities") or [] if isinstance(a, dict)]
     if statuses:
         available = any(s in ("IN_STOCK", "LIMITED_STOCK") for s in statuses)
-    end = _timestamp(data.get("itemEndDate"))
-    if end is not None and end < time.time():
-        available = False
+    end = data.get("itemEndDate")
+    if end:
+        try:
+            if datetime.fromisoformat(end.replace("Z", "+00:00")) < datetime.now(timezone.utc):
+                available = False
+        except ValueError:
+            pass
     return ItemPage(description=_text(data.get("description") or "") or data.get("shortDescription") or "",
                     available=available, status="" if available is not False else "beendet",
-                    price=_money(data.get("price")) or _money(data.get("currentBidPrice")), ends_at=_auction_end(data))
+                    price=_money(data.get("price")))
 
 
 class EbayClient:
@@ -320,7 +302,7 @@ class EbayClient:
                                      {**query, "limit": per_page, "offset": page * per_page}) or {}
                 batch = [item for item in (_normalize(s, self.base_url) for s in data.get("itemSummaries") or []) if item]
                 items.extend(batch)
-                if not data.get("next") or not batch or (until and until(batch)):
+                if not data.get("next") or not data.get("itemSummaries") or (until and batch and until(batch)):
                     break
         except AuthError as exc:
             if not self._auth_logged:

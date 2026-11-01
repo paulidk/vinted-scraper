@@ -166,7 +166,6 @@ class ItemPage:
     available: bool | None = None  # None: the page didn't say
     status: str = ""  # what the site shows instead of a buy button: "Verkauft", "Reserviert", ...
     price: float | None = None  # the current asking price, if the page shows one
-    ends_at: float | None = None  # when an auction ends (epoch seconds)
 
 
 # Sold, reserved or hidden listings carry a status block for buyers ({"title": "Verkauft", ...,

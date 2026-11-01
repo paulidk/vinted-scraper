@@ -16,7 +16,7 @@ scorers. A local web UI edits `config.yaml`.
 - Arch Linux, **fish** shell. Activate the venv with `source .venv/bin/activate.fish`, not
   `activate`. Arch blocks system-wide `pip install` (PEP 668), so always use the venv, or call
   `.venv/bin/python` / `.venv/bin/pip` directly.
-- Checkout: `~/scraper/vinted-scraper`.
+- Checkout: `~/Desktop/vinted-scraper/vinted-scraper`.
 - Branch `claude/vinted-mini-pc-scraper-u4ym6a` is the only branch and is used as main.
   Commit and push there.
 - `config.yaml`, `config.yaml.bak`, `.env` and `data/` are gitignored. They hold the user's
@@ -119,13 +119,13 @@ main site, so queries crawled before multi-site support aren't crawled deep agai
 
 ## eBay (`ebay.py`)
 
-Third source, `sites: [..., ebay]`, filters under `ebay:` (`category`, `seller`, `country`, `auctions`,
+Third source, `sites: [..., ebay]`, filters under `ebay:` (`category`, `seller`, `country`,
 `conditions`). Uses the Browse API (`api.ebay.com/buy/browse/v1`), not the website: www.ebay.de answers
 scripts with 403. Keys: `client.ebay_client_id` / `ebay_client_secret` or `EBAY_CLIENT_ID` /
 `EBAY_CLIENT_SECRET`; missing or rejected keys are logged once and the site is skipped (not a block, so
 podiums still update). 429 = daily call limit -> `BlockedError`. Search: `sort=newlyListed`, 100 per
-page, `deliveryCountry:DE` + `itemLocationCountry:DE` by default, fixed price/best offer only, no
-"for parts" condition. Ids are `ID_OFFSET` (2·10^15) + legacy item id; URLs are rebuilt as
+page, `deliveryCountry:DE` + `itemLocationCountry:DE` by default, fixed price/best offer only (results also listing `AUCTION`, i.e. auctions with Sofort-Kaufen, are
+dropped), no "for parts" condition. Ids are `ID_OFFSET` (2·10^15) + legacy item id; URLs are rebuilt as
 `www.ebay.de/itm/<id>` without tracking params, so `client_for` finds the client by host.
 `Listing.shipping` (stored column `shipping`) is the quoted cost and replaces `shipping_estimate` in
 every scorer (`Listing.shipping_or`). Category ids were checked on ebay.de 2026-10-28: 179 PC Desktops & All-in-Ones, 11211
@@ -133,12 +133,10 @@ Computerserver, 170083 Arbeitsspeicher, 56083 Interne Festplatten, 106273 Netzge
 The tests use fake responses built from eBay's documented format. The user's keys are in `config.yaml`,
 so `probe` with an ebay.de search URL checks it live.
 
-The `buyingOptions` filter lets auctions through that also offer `FIXED_PRICE` or `BEST_OFFER` (seen live
-2026-11-01). Without a fixed price, `price` is empty in search results and the current bid in `getItem`.
-`Listing.ends_at` is the end of an auction (`itemEndDate`, column `ends_at`), and `SearchConfig.keeps` rejects
-it as "excluded" unless it ends within `notify.auction_hours` (default 12). Rescoring brings it back; `RECENT`
-in `storage.py` keeps running auctions in the ranking window, since a 7-day auction has long left the newest-first
-results by then. Rows from before the column learn their end from `getItem` once they reach the podium.
+Auctions are always out, by the user's decision (2026-11-01, over an earlier `notify.auction_hours` that
+showed them near their end). The `buyingOptions` filter lets through auctions that also offer `FIXED_PRICE`
+or `BEST_OFFER` (seen live), so `_normalize` drops any result marked `AUCTION`. Ones stored earlier have
+"Auktion" in `extra`; `LISTED` in `storage.py` hides them.
 
 ## Spec parsing rules (`specs.py`)
 

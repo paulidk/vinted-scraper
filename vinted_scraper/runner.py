@@ -200,7 +200,7 @@ class Runner:
                     continue
                 if page.available:
                     self.store.mark_seen(search.name, item_id)
-                    self._complete(search, scorer, item_id, page.description, page.price, page.ends_at)
+                    self._complete(search, scorer, item_id, page.description, page.price)
                 else:
                     log.info("[%s] no longer for sale (%s): %s", search.name, page.status or "gone", urls[item_id])
                     self.store.mark_gone(search.name, item_id)
@@ -219,10 +219,10 @@ class Runner:
         return podium
 
     def _complete(self, search: SearchConfig, scorer, item_id: int, description: str,
-                  price: float | None = None, ends_at: float | None = None) -> None:
+                  price: float | None = None) -> None:
         """The availability check loaded the listing anyway: keep its full description and current
         price and rescore, so a podium place never rests on a search snippet ("Es ist ein i5
-        verbaut. Es...") or on a price the seller has changed since. Rows stored before auction end times were kept learn theirs here."""
+        verbaut. Es...") or on a price the seller has changed since."""
         listing = self.store.listing(search.name, item_id)
         if not listing:
             return
@@ -233,10 +233,7 @@ class Runner:
         if repriced:
             log.info("[%s] price changed %g -> %g: %s", search.name, listing.price, price, listing.url)
             self.store.set_price(search.name, item_id, price)
-        dated = ends_at is not None and ends_at != listing.ends_at
-        if dated:
-            self.store.set_ends_at(search.name, item_id, ends_at)
-        if longer or repriced or dated:
+        if longer or repriced:
             listing = self.store.listing(search.name, item_id)
             self.store.update_score(search.name, item_id, score_stored(listing, search, scorer or build_scorer(search.scorer)))
 

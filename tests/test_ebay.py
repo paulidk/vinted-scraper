@@ -1,6 +1,5 @@
 import json
 import logging
-from datetime import datetime, timezone
 
 import pytest
 
@@ -68,11 +67,11 @@ def test_search_query_filters():
     filters = q["filter"].split(",")
     assert "deliveryCountry:DE" in filters and "itemLocationCountry:DE" in filters
     assert "price:[30..200]" in filters and "priceCurrency:EUR" in filters
-    assert "buyingOptions:{FIXED_PRICE|BEST_OFFER}" in filters  # no auctions unless asked
+    assert "buyingOptions:{FIXED_PRICE|BEST_OFFER}" in filters
     assert "sellerAccountTypes:{INDIVIDUAL}" in filters
     assert any(f.startswith("conditionIds:") and "7000" not in f for f in filters)  # no "for parts"
-    q = search_query({"category": 179, "auctions": True, "country": "any", "conditions": "all", "price_to": 99.5})
-    assert "q" not in q and "AUCTION" in q["filter"] and "itemLocationCountry" not in q["filter"]
+    q = search_query({"category": 179, "country": "any", "conditions": "all", "price_to": 99.5})
+    assert "q" not in q and "AUCTION" not in q["filter"] and "itemLocationCountry" not in q["filter"]
     assert "conditionIds" not in q["filter"] and "price:[..99.5]" in q["filter"]
     with pytest.raises(ValueError):
         search_query({"seller": "privat"})  # neither terms nor category
@@ -103,6 +102,20 @@ def test_search_maps_results_and_pages_until_known():
     assert [c[2]["params"]["offset"] for c in calls] == [0, 100]
     headers = calls[0][2]["headers"]
     assert headers["X-EBAY-C-MARKETPLACE-ID"] == "EBAY_DE" and headers["Authorization"] == "Bearer t1"
+
+
+def test_auctions_are_dropped_even_with_buy_it_now(tmp_path):
+    client = make_client(Resp(200, {"itemSummaries": [summary(111111111111, buyingOptions=["AUCTION", "FIXED_PRICE"])],
+                                    "next": "more"}),
+                         Resp(200, {"itemSummaries": [summary(222222222222)]}))
+    assert [i["id"] - ID_OFFSET for i in client.search({"search_text": "optiplex"}, pages=5)] == [222222222222]  # kept paging
+
+    store = Store(tmp_path / "db.sqlite")
+    scorer = build_scorer({"type": "price"})
+    for item_id, extra in ((1, "Halle · Auktion"), (2, "Halle")):
+        listing = Listing(id=item_id, title="PC", price=50, currency="EUR", url=f"https://www.ebay.de/itm/{item_id}", extra=extra)
+        store.upsert("mini", listing, scorer.score(listing))
+    assert [r["id"] for r in store.top("mini")] == [2] and [r["id"] for r in store.rows("mini")] == [2]
 
 
 def test_missing_keys_log_once_and_skip(caplog):
@@ -162,17 +175,3 @@ def test_config_sites_and_store_round_trip(tmp_path):
     listing = Listing.from_api(item)
     store.upsert("mini", listing, build_scorer({"type": "price"}).score(listing))
     assert store.listing("mini", listing.id).shipping == 5.99
-
-
-def test_auctions_carry_their_end_time():
-    end = "2030-01-02T03:04:05.000Z"
-    bid = summary(2, buyingOptions=["AUCTION", "BEST_OFFER"], itemEndDate=end, price=None, currentBidPrice={"value": "81.32", "currency": "EUR"})
-    fixed = summary(3, itemEndDate=end)  # a fixed-price listing's end date means nothing
-    client = make_client(Resp(200, {"itemSummaries": [bid, fixed]}))
-    items = client.search({"search_text": "mini pc"})
-    auction, plain = [Listing.from_api(i) for i in items]
-    assert auction.price == 81.32 and auction.ends_at == datetime(2030, 1, 2, 3, 4, 5, tzinfo=timezone.utc).timestamp()
-    assert plain.ends_at is None
-    page = parse_item({"buyingOptions": ["AUCTION"], "itemEndDate": end, "currentBidPrice": {"value": "90", "currency": "EUR"}})
-    assert page.ends_at == auction.ends_at and page.price == 90
-    assert parse_item({"buyingOptions": ["FIXED_PRICE"], "itemEndDate": end}).ends_at is None
