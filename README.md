@@ -182,6 +182,21 @@ the podium check reads the current price and whether the listing has ended. Aler
 shipping, "Preisvorschlag" (best offer) and "gewerblich". The payment check is skipped, because
 payment always runs through eBay. eBay ids are stored with an offset (2·10^15).
 
+## Mydealz and refurbish shops
+
+Two more `sites`, both without text search: every deal or product goes to the scorer, which drops what
+doesn't fit.
+
+- `mydealz` reads the RSS feed of deal groups (`mydealz: {groups: [mini-pc, desktop-pc]}`), the 30 newest
+  each. Deals are new hardware too, often from AliExpress, and the price may need a coupon from the deal.
+  A podium place is checked against the deal page, so expired deals drop out.
+- `shopify` reads shops built on Shopify, such as the refurbisher it-versand.com
+  (`shopify: {collections: [https://it-versand.com/collections/lenovo-thinkcentre-refurbished]}`). Each
+  configuration in stock is one listing. Refurbishers cost more than private sellers but give warranty.
+
+Amazon (Retourenkauf) answers scripts with a captcha, and refurbed.de lists models "from" a price
+without fixed specs, so neither is a source.
+
 ## Payment
 
 `reject: offsite` (on by default in the PC, RAM, drive and NAS scorers) sorts out listings that want

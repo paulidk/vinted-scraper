@@ -154,7 +154,7 @@ class KleinanzeigenClient(VintedClient):
                 break
         return items
 
-    def item_page(self, item_id: int | str) -> ItemPage | None:
+    def item_page(self, item_id: int | str, url: str = "") -> ItemPage | None:
         ad_id = int(item_id) % ID_OFFSET
         try:
             resp = self._get(f"/s-anzeige/{ad_id}", None, _HTML_ACCEPT, self.base_url + "/", json_body=False)

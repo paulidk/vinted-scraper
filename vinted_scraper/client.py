@@ -228,6 +228,8 @@ class ClientSettings:
     timeout: float = 30.0
     # A long-lived Vinted session starts getting pages without items after about a day. 0 = never renew.
     session_hours: float = 6.0
+    # Hosts of the searches' `shopify.collections`, filled in by load_config (not a setting)
+    shop_domains: list[str] = field(default_factory=list)
     # eBay's API keys (developer.ebay.com, production "App ID" and "Cert ID"); EBAY_CLIENT_ID /
     # EBAY_CLIENT_SECRET in the environment work too
     ebay_client_id: str = ""
@@ -380,8 +382,9 @@ class VintedClient:
                 break
         return items[: per_page * pages]
 
-    def item_page(self, item_id: int | str) -> ItemPage | None:
-        """Best-effort fetch of a listing's page; None when blocked or unreadable."""
+    def item_page(self, item_id: int | str, url: str = "") -> ItemPage | None:
+        """Best-effort fetch of a listing's page; None when blocked or unreadable. `url` is the stored
+        listing URL, for sites that can't find a listing by id alone."""
         try:
             html = self.get_html(f"/items/{item_id}", referer=self.base_url + "/catalog")
         except BlockedError as exc:

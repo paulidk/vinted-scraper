@@ -11,8 +11,10 @@ import yaml
 from . import ebay
 from .client import ClientSettings, params_from_url
 from .kleinanzeigen import DOMAIN as KLEINANZEIGEN, is_kleinanzeigen
+from .mydealz import DOMAIN as MYDEALZ, is_mydealz
 
-SITES = ("vinted", "kleinanzeigen", "ebay")
+SITES = ("vinted", "kleinanzeigen", "ebay", "mydealz", "shopify")
+FEEDS = ("mydealz", "shopify")  # no text search: every listing of a group or collection goes to the scorer
 
 _ENV = re.compile(r"\$\{(\w+)(?::-([^}]*))?\}")
 
@@ -109,6 +111,8 @@ def _quiet_hours(raw) -> tuple[int, int] | None:
 
 
 def site_of(url: str) -> str:
+    if is_mydealz(url):
+        return "mydealz"
     return "kleinanzeigen" if is_kleinanzeigen(url) else "ebay" if ebay.is_ebay(url) else "vinted"
 
 
@@ -117,7 +121,8 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
 
     `params` are Vinted's (`catalog_ids`, `order`, ...), `kleinanzeigen` holds Kleinanzeigen's
     (`category`, `shipping`, `seller`, ...) and `ebay` eBay's (`category`, `seller`,
-    `country`, `conditions`). A search on a single site may put its filters in `params`.
+    `country`, `conditions`). A search on a single site may put its filters in `params`. `mydealz.groups`
+    and `shopify.collections` (shop collection URLs) are feeds: search terms don't apply to them.
     """
     urls = [raw["url"]] if "url" in raw else raw.get("urls", [])
     url_sites = {site_of(u) for u in urls}
@@ -137,7 +142,7 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
         return dict(raw.get(site) or (raw.get("params") if only == site else None) or {})
 
     bases = {"vinted": (filters("vinted"), vinted_domain), "kleinanzeigen": (filters("kleinanzeigen"), KLEINANZEIGEN),
-             "ebay": (filters("ebay"), ebay.DOMAIN)}
+             "ebay": (filters("ebay"), ebay.DOMAIN), "mydealz": (filters("mydealz"), MYDEALZ), "shopify": (filters("shopify"), "")}
     queries: list[dict] = []
     for url in urls:
         site, netloc = site_of(url), urlparse(url).netloc
@@ -152,7 +157,21 @@ def _search(raw: dict, default_domain: str) -> SearchConfig:
     texts = raw.get("queries") or ([raw["query"]] if "query" in raw else [])
     for site in sites:
         base, domain = bases[site]
-        if texts:
+        if site == "mydealz":
+            groups = base.pop("groups", None) or []
+            if not groups:
+                raise ValueError(f"search {raw.get('name')!r}: mydealz needs mydealz.groups, e.g. [mini-pc]")
+            queries += [{**base, "group": str(g).strip("/").removeprefix("gruppe/"), "domain": domain} for g in groups]
+        elif site == "shopify":
+            shops = base.pop("collections", None) or []
+            if not shops:
+                raise ValueError(f"search {raw.get('name')!r}: shopify needs shopify.collections (shop collection URLs)")
+            for url in shops:
+                parsed = urlparse(url)
+                if not parsed.netloc or not parsed.path.startswith("/collections/"):
+                    raise ValueError(f"search {raw.get('name')!r}: {url!r} is no shop collection URL (https://shop/collections/...)")
+                queries.append({**base, "collection": parsed.path, "domain": parsed.netloc})
+        elif texts:
             queries += [{**base, "search_text": text, "domain": domain} for text in texts]
         elif site not in url_sites:
             if site == "ebay" and not base.get("category"):
@@ -192,6 +211,7 @@ def load_config(path: str | Path) -> Config:
     searches = [_search(s, client.domain) for s in raw.get("searches") or []]
     if not searches:
         raise ValueError(f"{path}: no searches configured")
+    client.shop_domains = sorted({q["domain"] for s in searches for q in s.queries if "collection" in q})
     names = [s.name for s in searches]
     if len(set(names)) != len(names):
         raise ValueError(f"{path}: search names must be unique")

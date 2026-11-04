@@ -171,8 +171,8 @@ function normalize(c) {
   c.notifiers = c.notifiers || [];
   return c;
 }
-const SITE_NAMES = { vinted: "Vinted", kleinanzeigen: "Kleinanzeigen", ebay: "eBay" };
-const siteOfUrl = (u) => (u.includes("kleinanzeigen.") ? "kleinanzeigen" : /(^|[\/.])ebay\./.test(u) ? "ebay" : "vinted");
+const SITE_NAMES = { vinted: "Vinted", kleinanzeigen: "Kleinanzeigen", ebay: "eBay", mydealz: "Mydealz", shopify: "Shopify shops" };
+const siteOfUrl = (u) => (u.includes("kleinanzeigen.") ? "kleinanzeigen" : /(^|[\/.])ebay\./.test(u) ? "ebay" : u.includes("mydealz.") ? "mydealz" : "vinted");
 function sitesOf(s) {
   if (s.sites?.length) return s.sites;
   const found = new Set((s.urls || []).map(siteOfUrl));
@@ -397,6 +397,7 @@ function scoreTester(s) {
 // ---------------------------------------------------------------- tabs
 function searchCard(s, i, open) {
   const sites = sitesOf(s), vinted = sites.includes("vinted"), ka = sites.includes("kleinanzeigen"), eb = sites.includes("ebay");
+  const md = sites.includes("mydealz"), sh = sites.includes("shopify");
   const scorerBox = h("div");
   const summaryName = h("span", {}, s.name || "(unnamed)");
   const tag = h("span", { class: "tag" }, s.scorer.type || "rules");
@@ -427,7 +428,7 @@ function searchCard(s, i, open) {
     h("h3", {}, "What to search"),
     h("div", { class: "grid wide" },
       field(s, "name", "Name (unique)", { placeholder: "mini-pc", onchange: () => (summaryName.textContent = s.name || "(unnamed)") }),
-      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen"), siteBox("ebay"),
+      h("div", { class: "row" }, h("span", { class: "muted" }, "Search on:"), siteBox("vinted"), siteBox("kleinanzeigen"), siteBox("ebay"), siteBox("mydealz"), siteBox("shopify"),
         h("label", { class: "check" }, h("input", { type: "checkbox", checked: s.enabled !== false, onchange: (e) => {
           if (e.target.checked) delete s.enabled; else s.enabled = false;
           offTag.hidden = e.target.checked; touch(); } }), "Enabled")),
@@ -435,6 +436,10 @@ function searchCard(s, i, open) {
       field(s, "queries", "Search terms (one per line)", { type: "lines", placeholder: "optiplex micro\nthinkcentre tiny", full: true,
         hint: (sites.length > 1 ? `Each term runs on ${sites.map((x) => SITE_NAMES[x]).join(", then on ")}; all results are ranked together. ` : "")
           + (ka || eb ? `Leave empty to take the whole ${[ka && "Kleinanzeigen", eb && "eBay"].filter(Boolean).join(" / ")} category.` : "") }),
+      md ? field(obj(s, "mydealz"), "groups", "Mydealz: deal groups (one per line)", { type: "lines", rows: 2, placeholder: "mini-pc\ndesktop-pc",
+        hint: "the part after mydealz.de/gruppe/; the 30 newest deals of each, search terms don't apply" }) : null,
+      sh ? field(obj(s, "shopify"), "collections", "Shopify shops: collection URLs (one per line)", { type: "lines", rows: 2, full: true,
+        placeholder: "https://it-versand.com/collections/lenovo-thinkcentre-refurbished", hint: "every product in stock is scored; search terms don't apply" }) : null,
       field(s, "urls", "…or search URLs copied from your browser, filters included (one per line)", { type: "lines", rows: 2, full: true,
         placeholder: ka && !vinted ? "https://www.kleinanzeigen.de/s-pcs/halle/optiplex/k0c228l2409r50" : "https://www.vinted.de/catalog?search_text=optiplex&price_to=150",
         hint: ka || eb ? "Vinted, Kleinanzeigen or eBay URLs. Kleinanzeigen puts your town and radius in the URL" : "" })),

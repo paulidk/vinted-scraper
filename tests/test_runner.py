@@ -26,7 +26,7 @@ class FakeClient:
         self.detail_calls.append(item_id)
         return self.descriptions.get(item_id)
 
-    def item_page(self, item_id):
+    def item_page(self, item_id, url=""):
         self.page_calls.append(item_id)
         return ItemPage(self.descriptions.get(item_id) or "", self.availability.get(item_id),
                         price=self.prices.get(item_id))

@@ -47,6 +47,7 @@ nothing. Start there when scraping breaks.
 |---|---|
 | `vinted_scraper/client.py` | curl_cffi HTTP client, Cloudflare handling, catalog-page and item-page parsing |
 | `vinted_scraper/kleinanzeigen.py` | Kleinanzeigen client: search paths, Astro island parsing, listing page (description, reserved/deleted) |
+| `vinted_scraper/mydealz.py`, `shopify.py` | Mydealz group RSS feeds; Shopify shops' `products.json` (refurbishers like it-versand.com) |
 | `vinted_scraper/ebay.py` | eBay client on the official Browse API (OAuth app token), search filters, `getItem` for description/ended/price |
 | `vinted_scraper/models.py` | `Listing` built from a normalized item dict |
 | `vinted_scraper/scoring/cpu_db.py` | ~380 CPUs (mini PC, desktop, Xeon, EPYC) → approx. PassMark + TDP, estimation for unknown models |
@@ -140,6 +141,18 @@ Auctions are always out, by the user's decision (2026-11-01, over an earlier `no
 showed them near their end). The `buyingOptions` filter lets through auctions that also offer `FIXED_PRICE`
 or `BEST_OFFER` (seen live), so `_normalize` drops any result marked `AUCTION`. Ones stored earlier have
 "Auktion" in `extra`; `LISTED` in `storage.py` hides them.
+
+## Mydealz and Shopify (`mydealz.py`, `shopify.py`)
+
+Feeds, not searches: `config._search` makes one query per `mydealz.groups` entry / `shopify.collections` URL and
+ignores search terms for them (`FEEDS`). Mydealz: `/rss/gruppe/<group>`, 30 newest, price and shop in
+`pepper:merchant`, ids `ID_OFFSET` 3·10^15 + thread id; a deal page has `"isExpired":true`, `/deals/<id>` without
+slug is 410, so `item_page` takes the stored `url` (every client's `item_page(item_id, url="")` does now).
+Shopify: `/collections/<c>/products.json` (250 per page), one listing per variant in stock, ids 4·10^15 + variant id,
+URL `/products/<handle>?variant=<id>`; `/products/<handle>.js` (prices in cents) for availability. `make_client`
+knows shop hosts from `ClientSettings.shop_domains`, filled by `load_config`. `specs._shop` exempts eBay, Mydealz
+and `/products/` URLs from the payment and pickup checks. Checked live 2026-11-04 (mydealz mini-pc, it-versand).
+Amazon Retourenkauf returns a captcha page and refurbed.de shows models "ab" a price without fixed specs: not sources.
 
 ## Spec parsing rules (`specs.py`)
 

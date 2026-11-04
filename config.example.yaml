@@ -167,6 +167,12 @@ searches:
   #   seller: privat          # or gewerblich
   #   country: DE             # where the item is (default); `any` = anything that ships to Germany
   #   conditions: "3000"      # eBay condition ids (3000 = used); default: all but "for parts"
+  # Two more sources without text search. Every deal or product goes to the scorer:
+  # sites: [vinted, kleinanzeigen, ebay, mydealz, shopify]
+  # mydealz:
+  #   groups: [mini-pc]       # mydealz.de/gruppe/<name>: the 30 newest deals, often new mini PCs from AliExpress & co.
+  # shopify:                  # refurbishers on Shopify; usually dearer, but with warranty
+  #   collections: [https://it-versand.com/collections/lenovo-thinkcentre-refurbished]
   # Without search terms it takes the whole category. The quoted shipping cost replaces
   # `shipping_estimate`, and `offsite` is ignored (payment always runs through eBay).
 

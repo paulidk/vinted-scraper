@@ -168,9 +168,14 @@ SHIPS_TOO = re.compile(
 )
 
 
+def _shop(url: str) -> bool:
+    """eBay, Mydealz deals and Shopify shops: payment runs through the site, and they ship."""
+    return "ebay." in url or "mydealz." in url or "/products/" in url
+
+
 def pickup_only(listing) -> bool:
     """eBay searches only return what ships to Germany, and its listings restate that in templates."""
-    if "ebay." in listing.url:
+    if _shop(listing.url):
         return False
     text = listing.text.lower()
     return bool(PICKUP_ONLY.search(text)) and not _offered(SHIPS_TOO, text)
@@ -184,7 +189,7 @@ def payment_reject(listing) -> str | None:
     payment itself. Vinted additionally treats any talk of paying elsewhere as a scam sign,
     unless the listing also says it can be bought through Vinted.
     """
-    if "ebay." in listing.url:
+    if _shop(listing.url):
         return None
     text = listing.text.lower()
     safe = "direkt kaufen" in listing.extra.lower() or _offered(SAFE_PAYMENT, text)

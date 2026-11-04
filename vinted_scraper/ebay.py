@@ -312,7 +312,7 @@ class EbayClient:
             log.error("eBay search %s failed: %s", params.get("search_text") or params, exc)
         return items
 
-    def item_page(self, item_id: int | str) -> ItemPage | None:
+    def item_page(self, item_id: int | str, url: str = "") -> ItemPage | None:
         legacy = int(item_id) % ID_OFFSET
         try:
             data = self.get_json("/buy/browse/v1/item/" + quote(f"v1|{legacy}|0", safe=""))

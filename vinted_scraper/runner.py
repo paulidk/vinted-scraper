@@ -21,9 +21,15 @@ log = logging.getLogger(__name__)
 def make_client(settings: ClientSettings) -> VintedClient:
     from .ebay import EbayClient, is_ebay
     from .kleinanzeigen import KleinanzeigenClient, is_kleinanzeigen
+    from .mydealz import MydealzClient, is_mydealz
+    from .shopify import ShopifyClient
 
     if is_ebay(settings.domain):
         return EbayClient(settings)
+    if is_mydealz(settings.domain):
+        return MydealzClient(settings)
+    if settings.domain in settings.shop_domains:
+        return ShopifyClient(settings)
     return KleinanzeigenClient(settings) if is_kleinanzeigen(settings.domain) else VintedClient(settings)
 
 
@@ -193,7 +199,7 @@ class Runner:
             for item_id in unverified[:checks]:
                 checks -= 1
                 checked.add(item_id)
-                page = self.client_for(search, urls[item_id]).item_page(item_id)
+                page = self.client_for(search, urls[item_id]).item_page(item_id, url=urls[item_id])
                 if page is None or page.available is None:
                     # Blocked, or the site changed its page again: keep it ranked, but say so.
                     log.warning("[%s] couldn't tell whether %s is still for sale", search.name, urls[item_id])
